@@ -100,9 +100,7 @@ function sleep(ms: number): Promise<void> {
  * Call the Gemini API with a 15-second timeout and at most 1 retry for transient errors.
  * Timeouts are NOT retried (they indicate the model is stuck).
  */
-async function callWithRetry(
-  generateFn: (signal: AbortSignal) => Promise<string>
-): Promise<string> {
+async function callWithRetry(generateFn: (signal: AbortSignal) => Promise<string>): Promise<string> {
   for (let attempt = 0; attempt < 2; attempt++) {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS)

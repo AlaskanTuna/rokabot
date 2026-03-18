@@ -13,10 +13,10 @@ const DECLINE_MESSAGES = [
 
 const BUSY_MESSAGES = [
   "I'm still thinking~ just a moment, okay?",
-  'Mou~ hold on, I haven\'t finished my thought yet!',
-  'Ah, wait wait — I\'m still working on my answer~',
+  "Mou~ hold on, I haven't finished my thought yet!",
+  "Ah, wait wait — I'm still working on my answer~",
   'Fufu~ so eager. Let me finish what I was saying first!',
-  'One thing at a time~ I\'m almost done, I promise!'
+  "One thing at a time~ I'm almost done, I promise!"
 ]
 
 const ERROR_MESSAGES = [

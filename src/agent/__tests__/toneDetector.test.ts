@@ -86,10 +86,10 @@ describe('detectTone', () => {
   describe('scans only last 3 messages', () => {
     it('ignores older messages beyond the last 3', () => {
       const messages = [
-        makeMessage('I feel so sad and lonely'),     // msg 1 (should be ignored)
+        makeMessage('I feel so sad and lonely'), // msg 1 (should be ignored)
         makeMessage('just talking about random stuff'), // msg 2
-        makeMessage('playing some games'),              // msg 3
-        makeMessage('this is fun right')                // msg 4
+        makeMessage('playing some games'), // msg 3
+        makeMessage('this is fun right') // msg 4
       ]
       // Only messages 2-4 are scanned; msg 1 with sad+lonely is outside the window
       expect(detectTone(messages)).toBe('playful')
