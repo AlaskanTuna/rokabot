@@ -9,12 +9,14 @@
  * are stubbed automatically since they are not needed for CLI testing).
  */
 
-import 'dotenv/config'
 import * as readline from 'node:readline'
 
-// Stub Discord env vars before any project module loads config.ts
-process.env.DISCORD_TOKEN ??= 'cli-test-stub'
-process.env.DISCORD_CLIENT_ID ??= 'cli-test-stub'
+// Stub Discord env vars BEFORE dotenv loads, so config.ts never throws
+process.env.DISCORD_TOKEN ||= 'cli-test-stub'
+process.env.DISCORD_CLIENT_ID ||= 'cli-test-stub'
+
+// Now load .env (won't overwrite the stubs since they're already set)
+await import('dotenv/config')
 
 // Check early so we get a friendly message instead of a config.ts stack trace
 if (!process.env.GEMINI_API_KEY) {
