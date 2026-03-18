@@ -17,7 +17,7 @@ export function createClient(): Client {
     rpd: config.rateLimit.rpd
   })
 
-  client.once('ready', () => handleReady(client))
+  client.once('clientReady', () => handleReady(client))
   client.on('interactionCreate', createInteractionHandler(rateLimiter))
   client.on('messageCreate', createMessageHandler(client, rateLimiter))
 
