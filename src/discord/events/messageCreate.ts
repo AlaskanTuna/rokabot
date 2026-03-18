@@ -1,9 +1,11 @@
 import type { Client, Message } from 'discord.js'
+import { DiscordAPIError } from 'discord.js'
 import { logger } from '../../utils/logger.js'
 import { RateLimiter } from '../../utils/rateLimiter.js'
-import { getRandomDecline, getRandomError, splitResponse } from '../responses.js'
+import { getRandomBusy, getRandomDecline, getRandomError, splitResponse } from '../responses.js'
 import { addMessage, getHistory, getOrCreateSession } from '../../session/sessionManager.js'
 import { generateResponse } from '../../agent/roka.js'
+import { isChannelBusy, markBusy, markFree } from '../concurrency.js'
 
 export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
   return async function handleMessageCreate(message: Message): Promise<void> {
@@ -32,10 +34,16 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
       return
     }
 
+    if (isChannelBusy(channelId)) {
+      await message.reply(getRandomBusy())
+      return
+    }
+
     if ('sendTyping' in message.channel) {
       await message.channel.sendTyping()
     }
 
+    markBusy(channelId)
     try {
       getOrCreateSession(channelId)
 
@@ -72,8 +80,25 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
         }
       }
     } catch (error) {
+      if (error instanceof DiscordAPIError) {
+        const code = error.code
+        if (code === 50013 || code === 10008) {
+          logger.warn({ error, channelId, code }, 'Discord API error (ignored)')
+          return
+        }
+      }
       logger.error({ error, channelId }, 'Error handling message')
-      await message.reply(getRandomError())
+      try {
+        await message.reply(getRandomError())
+      } catch (replyError) {
+        if (replyError instanceof DiscordAPIError && (replyError.code === 50013 || replyError.code === 10008)) {
+          logger.warn({ error: replyError, channelId }, 'Could not send error reply (ignored)')
+        } else {
+          logger.error({ error: replyError, channelId }, 'Failed to send error reply')
+        }
+      }
+    } finally {
+      markFree(channelId)
     }
   }
 }

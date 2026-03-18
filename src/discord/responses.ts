@@ -11,14 +11,26 @@ const DECLINE_MESSAGES = [
   "Ah, sorry — I'm in the middle of something. I'll be right back!"
 ]
 
+const BUSY_MESSAGES = [
+  "I'm still thinking~ just a moment, okay?",
+  'Mou~ hold on, I haven\'t finished my thought yet!',
+  'Ah, wait wait — I\'m still working on my answer~',
+  'Fufu~ so eager. Let me finish what I was saying first!',
+  'One thing at a time~ I\'m almost done, I promise!'
+]
+
 const ERROR_MESSAGES = [
-  "Nn... something feels off. Let me try again in a bit, okay?",
+  'Nn... something feels off. Let me try again in a bit, okay?',
   "Ah, that's strange... my thoughts got all jumbled up. Give me a moment.",
-  "Mou, I lost my train of thought... sorry about that."
+  'Mou, I lost my train of thought... sorry about that.'
 ]
 
 export function getRandomDecline(): string {
   return DECLINE_MESSAGES[Math.floor(Math.random() * DECLINE_MESSAGES.length)]
+}
+
+export function getRandomBusy(): string {
+  return BUSY_MESSAGES[Math.floor(Math.random() * BUSY_MESSAGES.length)]
 }
 
 export function getRandomError(): string {

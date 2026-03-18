@@ -1,9 +1,11 @@
 import type { ChatInputCommandInteraction, Interaction } from 'discord.js'
+import { DiscordAPIError } from 'discord.js'
 import { logger } from '../../utils/logger.js'
 import { RateLimiter } from '../../utils/rateLimiter.js'
-import { getRandomDecline, getRandomError, splitResponse } from '../responses.js'
+import { getRandomBusy, getRandomDecline, getRandomError, splitResponse } from '../responses.js'
 import { addMessage, getHistory, getOrCreateSession } from '../../session/sessionManager.js'
 import { generateResponse } from '../../agent/roka.js'
+import { isChannelBusy, markBusy, markFree } from '../concurrency.js'
 
 export function createInteractionHandler(rateLimiter: RateLimiter) {
   return async function handleInteractionCreate(interaction: Interaction): Promise<void> {
@@ -13,8 +15,7 @@ export function createInteractionHandler(rateLimiter: RateLimiter) {
     const message = interaction.options.getString('message', true)
     const channelId = interaction.channelId
     const member = interaction.member
-    const displayName =
-      member && 'displayName' in member ? member.displayName : interaction.user.displayName
+    const displayName = member && 'displayName' in member ? member.displayName : interaction.user.displayName
 
     logger.info({ channelId, command: 'chat' }, 'Slash command received')
 
@@ -23,8 +24,14 @@ export function createInteractionHandler(rateLimiter: RateLimiter) {
       return
     }
 
+    if (isChannelBusy(channelId)) {
+      await interaction.reply({ content: getRandomBusy() })
+      return
+    }
+
     await interaction.deferReply()
 
+    markBusy(channelId)
     try {
       getOrCreateSession(channelId)
 
@@ -59,8 +66,25 @@ export function createInteractionHandler(rateLimiter: RateLimiter) {
         await interaction.followUp({ content: chunks[i] })
       }
     } catch (error) {
+      if (error instanceof DiscordAPIError) {
+        const code = error.code
+        if (code === 50013 || code === 10008) {
+          logger.warn({ error, channelId, code }, 'Discord API error (ignored)')
+          return
+        }
+      }
       logger.error({ error, channelId }, 'Error handling /chat command')
-      await interaction.editReply({ content: getRandomError() })
+      try {
+        await interaction.editReply({ content: getRandomError() })
+      } catch (replyError) {
+        if (replyError instanceof DiscordAPIError && (replyError.code === 50013 || replyError.code === 10008)) {
+          logger.warn({ error: replyError, channelId }, 'Could not send error reply (ignored)')
+        } else {
+          logger.error({ error: replyError, channelId }, 'Failed to send error reply')
+        }
+      }
+    } finally {
+      markFree(channelId)
     }
   }
 }
