@@ -19,7 +19,7 @@
 
 ---
 
-Rokabot responds to `/chat` slash commands, @mentions, and replies with in-character dialogue. It maintains per-channel conversational memory using a 10-message sliding window with a 5-minute idle TTL. A 4-layer prompt system drives personality, speech patterns, dynamic tone selection, and channel awareness — all running within a ~1000-1600 token system prompt budget.
+Rokabot responds to `/chat` slash commands, @mentions, and replies with in-character dialogue. It can also perceive images attached to messages via Gemini's multimodal input. It maintains per-channel conversational memory using a 10-message sliding window with a 5-minute idle TTL. A 4-layer prompt system drives personality, speech patterns, dynamic tone selection, and channel awareness — all running within a ~1000-1600 token system prompt budget.
 
 All state is in-memory with no persistence. Bot restart = clean slate.
 
@@ -128,9 +128,10 @@ flowchart TB
     subgraph Gateway["Discord Gateway Layer"]
         direction TB
         Triggers["Triggers<br/><code>/chat</code> &bull; @mention &bull; reply"]
+        Attachments["Image Extractor<br/>Up to 3 attachments, 4 MB max each"]
         RateLimit["Rate Limiter<br/>Token Bucket RPM + Daily RPD"]
         Concurrency["Concurrency Guard<br/>1 active request per channel"]
-        Triggers --> RateLimit --> Concurrency
+        Triggers --> Attachments --> RateLimit --> Concurrency
     end
 
     subgraph Session["Session Manager"]
@@ -167,7 +168,8 @@ flowchart TB
     User -->|message| Gateway
     Concurrency --> Session
     Session -->|history + participants| Agent
-    Assembler -->|system prompt + history| Gemini
+    Attachments -->|image data (base64)| Agent
+    Assembler -->|system prompt + history + images| Gemini
     Gemini -->|response| Agent
     Agent -->|reply| Gateway
     Gateway -->|message| User
@@ -217,7 +219,8 @@ sequenceDiagram
     participant PA as Prompt Assembler
     participant Gemini as Gemini API
 
-    User->>Discord: /chat, @mention, or reply
+    User->>Discord: /chat, @mention, or reply (+ optional images)
+    Discord->>Discord: Extract image attachments (max 3, ≤4 MB each)
     Discord->>RL: tryConsume()
 
     alt Rate limit hit
@@ -243,7 +246,11 @@ sequenceDiagram
             Discord->>PA: assembleSystemPrompt()
             PA-->>Discord: system prompt
 
-            Discord->>Gemini: generate(prompt, history)
+            opt Images attached
+                Discord->>Discord: Download & base64 encode images
+            end
+
+            Discord->>Gemini: generate(prompt, history, images?)
 
             alt Transient error (429/500/503)
                 Gemini-->>Discord: error
