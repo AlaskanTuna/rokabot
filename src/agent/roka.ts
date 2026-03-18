@@ -10,11 +10,54 @@ import { config } from '../config.js'
  * when the TypeScript ADK stabilizes with proper session support.
  */
 
+export interface ImageAttachment {
+  url: string
+  contentType: string
+}
+
 interface GenerateOptions {
   userMessage: string
   displayName: string
   channelHistory: WindowMessage[]
   participants: string[]
+  imageAttachments?: ImageAttachment[]
+}
+
+/** Maximum image size in bytes (4 MB). Images larger than this are skipped. */
+const MAX_IMAGE_SIZE_BYTES = 4 * 1024 * 1024
+
+/**
+ * Download an image from a URL and return it as a base64-encoded string.
+ * Returns null if the image exceeds the size limit or the download fails.
+ */
+async function downloadImage(url: string): Promise<{ data: string; mimeType: string } | null> {
+  try {
+    const response = await fetch(url)
+    if (!response.ok) {
+      logger.warn({ url, status: response.status }, 'Failed to download image')
+      return null
+    }
+
+    const contentLength = response.headers.get('content-length')
+    if (contentLength && parseInt(contentLength, 10) > MAX_IMAGE_SIZE_BYTES) {
+      logger.warn({ url, size: contentLength }, 'Image exceeds 4 MB size limit, skipping')
+      return null
+    }
+
+    const buffer = await response.arrayBuffer()
+
+    if (buffer.byteLength > MAX_IMAGE_SIZE_BYTES) {
+      logger.warn({ url, size: buffer.byteLength }, 'Image exceeds 4 MB size limit, skipping')
+      return null
+    }
+
+    const base64 = Buffer.from(buffer).toString('base64')
+    const mimeType = response.headers.get('content-type') || 'image/png'
+    return { data: base64, mimeType }
+  } catch (error) {
+    logger.warn({ url, error }, 'Error downloading image')
+    return null
+  }
 }
 
 /** Delay before retrying a 429 rate-limited request (ms). */
@@ -135,7 +178,7 @@ async function callWithRetry(generateFn: (signal: AbortSignal) => Promise<string
 }
 
 export async function generateResponse(options: GenerateOptions): Promise<string> {
-  const { userMessage, displayName, channelHistory, participants } = options
+  const { userMessage, displayName, channelHistory, participants, imageAttachments } = options
 
   const tone = detectTone(channelHistory)
   const hour = new Date().getHours()
@@ -151,6 +194,25 @@ export async function generateResponse(options: GenerateOptions): Promise<string
 
     const ai = new GoogleGenAI({ apiKey: config.gemini.apiKey })
 
+    // Build image inline data parts for the current message (not replayed from history)
+    const imageParts: Array<{ inlineData: { data: string; mimeType: string } }> = []
+    if (imageAttachments?.length) {
+      const downloads = await Promise.all(imageAttachments.map((img) => downloadImage(img.url)))
+      for (const result of downloads) {
+        if (result) {
+          imageParts.push({ inlineData: { data: result.data, mimeType: result.mimeType } })
+        }
+      }
+      if (imageParts.length > 0) {
+        logger.debug({ imageCount: imageParts.length }, 'Attached images to Gemini request')
+      }
+    }
+
+    const currentUserParts: Array<{ text: string } | { inlineData: { data: string; mimeType: string } }> = [
+      ...imageParts,
+      { text: `[${displayName}]: ${userMessage}` }
+    ]
+
     const contents = [
       ...channelHistory.map((m) => ({
         role: m.role === 'assistant' ? ('model' as const) : ('user' as const),
@@ -158,7 +220,7 @@ export async function generateResponse(options: GenerateOptions): Promise<string
       })),
       {
         role: 'user' as const,
-        parts: [{ text: `[${displayName}]: ${userMessage}` }]
+        parts: currentUserParts
       }
     ]
 

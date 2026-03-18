@@ -4,7 +4,7 @@ import { logger } from '../../utils/logger.js'
 import { RateLimiter } from '../../utils/rateLimiter.js'
 import { getRandomBusy, getRandomDecline, getRandomError, splitResponse } from '../responses.js'
 import { addMessage, getHistory, getOrCreateSession } from '../../session/sessionManager.js'
-import { generateResponse } from '../../agent/roka.js'
+import { generateResponse, type ImageAttachment } from '../../agent/roka.js'
 import { isChannelBusy, markBusy, markFree } from '../concurrency.js'
 
 export function createInteractionHandler(rateLimiter: RateLimiter) {
@@ -13,9 +13,17 @@ export function createInteractionHandler(rateLimiter: RateLimiter) {
     if (interaction.commandName !== 'chat') return
 
     const message = interaction.options.getString('message', true)
+    const attachment = interaction.options.getAttachment('image')
     const channelId = interaction.channelId
     const member = interaction.member
     const displayName = member && 'displayName' in member ? member.displayName : interaction.user.displayName
+
+    // Extract image attachment if provided and it has a valid image content type
+    const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp'])
+    const imageAttachments: ImageAttachment[] = []
+    if (attachment?.contentType && ALLOWED_IMAGE_TYPES.has(attachment.contentType)) {
+      imageAttachments.push({ url: attachment.url, contentType: attachment.contentType })
+    }
 
     logger.info({ channelId, command: 'chat' }, 'Slash command received')
 
@@ -49,7 +57,8 @@ export function createInteractionHandler(rateLimiter: RateLimiter) {
         userMessage: message,
         displayName,
         channelHistory: history.slice(0, -1),
-        participants
+        participants,
+        imageAttachments: imageAttachments.length > 0 ? imageAttachments : undefined
       })
 
       addMessage(channelId, {

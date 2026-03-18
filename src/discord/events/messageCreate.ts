@@ -4,7 +4,7 @@ import { logger } from '../../utils/logger.js'
 import { RateLimiter } from '../../utils/rateLimiter.js'
 import { getRandomBusy, getRandomDecline, getRandomEmptyMention, getRandomError, splitResponse } from '../responses.js'
 import { addMessage, getHistory, getOrCreateSession } from '../../session/sessionManager.js'
-import { generateResponse } from '../../agent/roka.js'
+import { generateResponse, type ImageAttachment } from '../../agent/roka.js'
 import { isChannelBusy, markBusy, markFree } from '../concurrency.js'
 
 export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
@@ -25,7 +25,15 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
 
     const content = message.content.replace(/<@!?\d+>/g, '').trim()
 
-    if (!content) {
+    // Extract image attachments (max 3, image types only)
+    const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp'])
+    const MAX_IMAGE_ATTACHMENTS = 3
+    const imageAttachments: ImageAttachment[] = message.attachments
+      .filter((a) => a.contentType !== null && ALLOWED_IMAGE_TYPES.has(a.contentType))
+      .map((a) => ({ url: a.url, contentType: a.contentType! }))
+      .slice(0, MAX_IMAGE_ATTACHMENTS)
+
+    if (!content && imageAttachments.length === 0) {
       logger.info({ channelId, trigger: isMentioned ? 'mention' : 'reply' }, 'Empty mention detected')
       await message.reply(getRandomEmptyMention())
       return
@@ -62,10 +70,11 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
       const participants = [...new Set(history.map((m) => m.displayName))]
 
       const response = await generateResponse({
-        userMessage: content,
+        userMessage: content || '(shared an image)',
         displayName,
         channelHistory: history.slice(0, -1),
-        participants
+        participants,
+        imageAttachments: imageAttachments.length > 0 ? imageAttachments : undefined
       })
 
       addMessage(channelId, {
