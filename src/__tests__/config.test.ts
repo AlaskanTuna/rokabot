@@ -15,6 +15,19 @@ describe('config module', () => {
     vi.stubEnv('GEMINI_API_KEY', 'test-api-key')
   }
 
+  /** Clear any env overrides that dotenv may have loaded from .env */
+  function clearTunableEnvVars() {
+    vi.stubEnv('LOG_LEVEL', '')
+    vi.stubEnv('RATE_LIMIT_RPM', '')
+    vi.stubEnv('RATE_LIMIT_RPD', '')
+    vi.stubEnv('SESSION_TTL_MS', '')
+    vi.stubEnv('SESSION_WINDOW_SIZE', '')
+    vi.stubEnv('GEMINI_MODEL', '')
+    vi.stubEnv('GEMINI_TIMEOUT', '')
+    vi.stubEnv('GEMINI_MAX_RETRIES', '')
+    vi.stubEnv('DISCORD_MAX_MESSAGE_LENGTH', '')
+  }
+
   it('throws if DISCORD_TOKEN is missing', async () => {
     vi.stubEnv('DISCORD_TOKEN', '')
     vi.stubEnv('DISCORD_CLIENT_ID', 'test-client-id')
@@ -41,25 +54,34 @@ describe('config module', () => {
     await expect(() => import('../config.js')).rejects.toThrow('Missing required environment variable: GEMINI_API_KEY')
   })
 
-  it('uses default values for optional vars', async () => {
+  it('loads defaults from config.yml when no env overrides set', async () => {
     setRequiredEnvVars()
+    clearTunableEnvVars()
 
     const { config } = await import('../config.js')
 
+    expect(config.gemini.model).toBe('gemini-2.0-flash-lite')
+    expect(config.gemini.timeout).toBe(15_000)
+    expect(config.gemini.maxRetries).toBe(1)
     expect(config.logging.level).toBe('info')
     expect(config.rateLimit.rpm).toBe(15)
     expect(config.rateLimit.rpd).toBe(500)
-    expect(config.session.ttlMs).toBe(100_000)
+    expect(config.session.ttlMs).toBe(300_000)
     expect(config.session.windowSize).toBe(10)
+    expect(config.discord.maxMessageLength).toBe(2000)
   })
 
-  it('reads optional vars from env when provided', async () => {
+  it('env vars override config.yml values', async () => {
     setRequiredEnvVars()
     vi.stubEnv('LOG_LEVEL', 'debug')
     vi.stubEnv('RATE_LIMIT_RPM', '30')
     vi.stubEnv('RATE_LIMIT_RPD', '1000')
     vi.stubEnv('SESSION_TTL_MS', '600000')
     vi.stubEnv('SESSION_WINDOW_SIZE', '20')
+    vi.stubEnv('GEMINI_MODEL', 'gemini-pro')
+    vi.stubEnv('GEMINI_TIMEOUT', '30000')
+    vi.stubEnv('GEMINI_MAX_RETRIES', '3')
+    vi.stubEnv('DISCORD_MAX_MESSAGE_LENGTH', '4000')
 
     const { config } = await import('../config.js')
 
@@ -68,9 +90,13 @@ describe('config module', () => {
     expect(config.rateLimit.rpd).toBe(1000)
     expect(config.session.ttlMs).toBe(600_000)
     expect(config.session.windowSize).toBe(20)
+    expect(config.gemini.model).toBe('gemini-pro')
+    expect(config.gemini.timeout).toBe(30_000)
+    expect(config.gemini.maxRetries).toBe(3)
+    expect(config.discord.maxMessageLength).toBe(4000)
   })
 
-  it('throws if optionalInt receives non-numeric value', async () => {
+  it('throws if env int override is non-numeric', async () => {
     setRequiredEnvVars()
     vi.stubEnv('RATE_LIMIT_RPM', 'not-a-number')
 
