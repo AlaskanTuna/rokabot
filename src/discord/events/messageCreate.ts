@@ -13,17 +13,20 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
     if (!client.user) return
 
     const isMentioned = message.mentions.has(client.user.id)
-    const isReplyToBot =
-      message.reference?.messageId &&
-      (await message.channel.messages.fetch(message.reference.messageId).catch(() => null))?.author?.id ===
-        client.user.id
+
+    // Fetch the referenced message if this is a reply
+    const referencedMessage = message.reference?.messageId
+      ? await message.channel.messages.fetch(message.reference.messageId).catch(() => null)
+      : null
+
+    const isReplyToBot = referencedMessage?.author?.id === client.user.id
 
     if (!isMentioned && !isReplyToBot) return
 
     const channelId = message.channelId
     const displayName = message.member?.displayName ?? message.author.displayName
 
-    const content = message.content.replace(/<@!?\d+>/g, '').trim()
+    let content = message.content.replace(/<@!?\d+>/g, '').trim()
 
     // Extract image attachments (max 3, image types only)
     const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp'])
@@ -32,6 +35,30 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
       .filter((a) => a.contentType !== null && ALLOWED_IMAGE_TYPES.has(a.contentType))
       .map((a) => ({ url: a.url, contentType: a.contentType! }))
       .slice(0, MAX_IMAGE_ATTACHMENTS)
+
+    // If replying to another message (not the bot), include referenced content as context
+    if (referencedMessage && !isReplyToBot) {
+      const refAuthor = referencedMessage.member?.displayName ?? referencedMessage.author.displayName
+      const refContent = referencedMessage.content?.trim()
+
+      // Build context prefix from the referenced message
+      const refParts: string[] = []
+      if (refContent) refParts.push(refContent)
+      if (referencedMessage.attachments.size > 0) refParts.push('(attached image(s))')
+
+      if (refParts.length > 0) {
+        const refContext = `[Replying to ${refAuthor}: ${refParts.join(' ')}]`
+        content = content ? `${refContext}\n${content}` : refContext
+      }
+
+      // Also grab images from the referenced message
+      const refImages: ImageAttachment[] = referencedMessage.attachments
+        .filter((a) => a.contentType !== null && ALLOWED_IMAGE_TYPES.has(a.contentType))
+        .map((a) => ({ url: a.url, contentType: a.contentType! }))
+        .slice(0, MAX_IMAGE_ATTACHMENTS - imageAttachments.length)
+
+      imageAttachments.push(...refImages)
+    }
 
     if (!content && imageAttachments.length === 0) {
       logger.info({ channelId, trigger: isMentioned ? 'mention' : 'reply' }, 'Empty mention detected')
