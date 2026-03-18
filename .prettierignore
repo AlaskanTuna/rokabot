@@ -1,0 +1,46 @@
+# Dependencies
+# ============
+
+node_modules/
+
+# Build Output
+# ============
+
+dist/
+build/
+out/
+.next/
+.nuxt/
+.output/
+target/
+
+# Lock Files
+# ==========
+
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Python
+# ======
+
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+
+# IDE
+# ===
+
+.vscode/
+
+# Logs & Temp
+# ===========
+
+logs/
+*.log
+tmp/
+temp/
+
+# Custom
+# ===========
