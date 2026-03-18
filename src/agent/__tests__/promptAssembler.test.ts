@@ -17,7 +17,8 @@ describe('assembleSystemPrompt', () => {
   const baseInput: AssemblerInput = {
     tone: 'playful',
     participants: ['Alice'],
-    hour: 14
+    hour: 14,
+    displayName: 'Alice'
   }
 
   it('contains Layer 0: Core identity', () => {
@@ -67,7 +68,8 @@ describe('assembleSystemPrompt', () => {
     const input: AssemblerInput = {
       tone: 'playful',
       participants: ['Alice', 'Bob', 'Charlie'],
-      hour: 10
+      hour: 10,
+      displayName: 'Alice'
     }
     const result = assembleSystemPrompt(input)
     expect(result).toContain('Alice')
@@ -78,7 +80,7 @@ describe('assembleSystemPrompt', () => {
 
   it('handles single participant', () => {
     const result = assembleSystemPrompt(baseInput)
-    expect(result).toContain("You're talking with Alice")
+    expect(result).toContain('The user you are currently talking to is named "Alice"')
   })
 
   it('includes early morning context', () => {

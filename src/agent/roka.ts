@@ -142,7 +142,7 @@ export async function generateResponse(options: GenerateOptions): Promise<string
   const tone = detectTone(channelHistory)
   const hour = new Date().getHours()
 
-  const assemblerInput: AssemblerInput = { tone, participants, hour }
+  const assemblerInput: AssemblerInput = { tone, participants, hour, displayName }
   const systemPrompt = assembleSystemPrompt(assemblerInput)
 
   logger.debug({ tone, participantCount: participants.length, hour }, 'Prompt assembled')
@@ -178,14 +178,13 @@ export async function generateResponse(options: GenerateOptions): Promise<string
         }
       })
 
-      // Extract text parts manually to avoid the SDK's console.warn about
-      // non-text parts (e.g. thoughtSignature) in the response.
+      // Extract the first non-thought text part manually to avoid the SDK's
+      // console.warn about non-text parts (e.g. thoughtSignature). Using only
+      // the first text part prevents duplication when Gemini returns the same
+      // content across multiple parts.
       const parts = response.candidates?.[0]?.content?.parts ?? []
-      const responseText = parts
-        .filter((p): p is { text: string } => typeof p.text === 'string' && !p.thought)
-        .map((p) => p.text)
-        .join('')
-        .trim()
+      const firstTextPart = parts.find((p): p is { text: string } => typeof p.text === 'string' && !p.thought)
+      const responseText = firstTextPart?.text?.trim() ?? ''
 
       if (!responseText) {
         logger.warn('Empty response from Gemini')
@@ -195,11 +194,19 @@ export async function generateResponse(options: GenerateOptions): Promise<string
       return responseText
     })
 
-    return text
+    return stripRokaPrefix(text)
   } catch (error) {
     logger.error({ error }, 'Gemini API call failed')
     throw error
   }
+}
+
+/**
+ * Strip any leading "[Roka]:" or "Roka:" prefix that the model may
+ * produce by mimicking the history format.
+ */
+function stripRokaPrefix(text: string): string {
+  return text.replace(/^\[?Roka\]?:\s*/i, '').trim()
 }
 
 function getRandomFallback(): string {

@@ -4,15 +4,14 @@
  * Budget: ~50-100 tokens
  */
 
-export function buildContextPrompt(participants: string[], hour: number): string {
+export function buildContextPrompt(participants: string[], hour: number, displayName: string): string {
   const lines: string[] = ['## Situation']
 
   const timeOfDay = getTimeOfDay(hour)
   lines.push(`- It's currently ${timeOfDay}.`)
+  lines.push(`- The user you are currently talking to is named "${displayName}". Address them by this name.`)
 
-  if (participants.length === 1) {
-    lines.push(`- You're talking with ${participants[0]}.`)
-  } else if (participants.length > 1) {
+  if (participants.length > 1) {
     const names = participants.slice(0, 5).join(', ')
     lines.push(`- You're in a group conversation with: ${names}.`)
     lines.push('- Address people by name when responding to them directly.')

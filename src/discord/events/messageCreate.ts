@@ -2,7 +2,7 @@ import type { Client, Message } from 'discord.js'
 import { DiscordAPIError } from 'discord.js'
 import { logger } from '../../utils/logger.js'
 import { RateLimiter } from '../../utils/rateLimiter.js'
-import { getRandomBusy, getRandomDecline, getRandomError, splitResponse } from '../responses.js'
+import { getRandomBusy, getRandomDecline, getRandomEmptyMention, getRandomError, splitResponse } from '../responses.js'
 import { addMessage, getHistory, getOrCreateSession } from '../../session/sessionManager.js'
 import { generateResponse } from '../../agent/roka.js'
 import { isChannelBusy, markBusy, markFree } from '../concurrency.js'
@@ -25,7 +25,11 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
 
     const content = message.content.replace(/<@!?\d+>/g, '').trim()
 
-    if (!content) return
+    if (!content) {
+      logger.info({ channelId, trigger: isMentioned ? 'mention' : 'reply' }, 'Empty mention detected')
+      await message.reply(getRandomEmptyMention())
+      return
+    }
 
     logger.info({ channelId, trigger: isMentioned ? 'mention' : 'reply' }, 'Message trigger detected')
 
