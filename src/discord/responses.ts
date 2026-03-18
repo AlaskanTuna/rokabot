@@ -1,3 +1,5 @@
+import { config } from '../config.js'
+
 /**
  * In-character response pools for rate limiting and error handling.
  * These messages are sent without calling the LLM.
@@ -51,9 +53,9 @@ export function getRandomEmptyMention(): string {
 }
 
 /**
- * Split long responses to fit within Discord's 2000-character limit.
+ * Split long responses to fit within Discord's message character limit.
  */
-export function splitResponse(text: string, maxLength = 2000): string[] {
+export function splitResponse(text: string, maxLength = config.discord.maxMessageLength): string[] {
   if (text.length <= maxLength) return [text]
 
   const chunks: string[] = []

@@ -1,0 +1,22 @@
+# Rokabot Configuration
+# Secrets (DISCORD_TOKEN, DISCORD_CLIENT_ID, GEMINI_API_KEY) stay in .env
+# Environment variables can override any value below for backward compatibility.
+
+gemini:
+  model: gemini-2.0-flash-lite
+  timeout: 15000 # ms, request timeout
+  maxRetries: 1 # max retry attempts for transient errors
+
+rateLimit:
+  rpm: 15 # requests per minute
+  rpd: 500 # requests per day
+
+session:
+  ttl: 300000 # idle timeout in ms (5 min)
+  windowSize: 10 # FIFO message window size
+
+discord:
+  maxMessageLength: 2000 # Discord message char limit
+
+logging:
+  level: info # pino log level (debug/info/warn/error)

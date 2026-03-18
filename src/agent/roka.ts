@@ -17,9 +17,6 @@ interface GenerateOptions {
   participants: string[]
 }
 
-/** Timeout for a single Gemini API call (ms). */
-const GEMINI_TIMEOUT_MS = 15_000
-
 /** Delay before retrying a 429 rate-limited request (ms). */
 const RETRY_DELAY_429_MS = 4_000
 
@@ -97,13 +94,14 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * Call the Gemini API with a 15-second timeout and at most 1 retry for transient errors.
+ * Call the Gemini API with a configurable timeout and retry for transient errors.
  * Timeouts are NOT retried (they indicate the model is stuck).
  */
 async function callWithRetry(generateFn: (signal: AbortSignal) => Promise<string>): Promise<string> {
-  for (let attempt = 0; attempt < 2; attempt++) {
+  const maxAttempts = config.gemini.maxRetries + 1
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS)
+    const timer = setTimeout(() => controller.abort(), config.gemini.timeout)
 
     try {
       const result = await generateFn(controller.signal)
@@ -111,14 +109,14 @@ async function callWithRetry(generateFn: (signal: AbortSignal) => Promise<string
     } catch (error) {
       // Check if this was a timeout (AbortController fired)
       if (controller.signal.aborted) {
-        logger.error('Gemini API call timed out after 15s')
+        logger.error({ timeoutMs: config.gemini.timeout }, 'Gemini API call timed out')
         throw new Error('Gemini request timed out')
       }
 
       const status = getErrorStatus(error)
 
-      // On first attempt, retry if the status is retryable
-      if (attempt === 0 && status !== null && isRetryableStatus(status)) {
+      // On non-final attempt, retry if the status is retryable
+      if (attempt < maxAttempts - 1 && status !== null && isRetryableStatus(status)) {
         const delayMs = getRetryDelayMs(error, status)
         logger.warn({ status, delayMs, attempt: attempt + 1 }, 'Retrying Gemini API call after transient error')
         await sleep(delayMs)
@@ -173,7 +171,7 @@ export async function generateResponse(options: GenerateOptions): Promise<string
           maxOutputTokens: 512,
           temperature: 0.9,
           topP: 0.95,
-          httpOptions: { timeout: GEMINI_TIMEOUT_MS },
+          httpOptions: { timeout: config.gemini.timeout },
           abortSignal: signal
         }
       })
