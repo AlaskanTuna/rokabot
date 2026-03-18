@@ -23,6 +23,12 @@ const TONE_PATTERNS: { tone: ToneKey; patterns: RegExp[] }[] = [
       /\bblush\b/i,
       /\bflirt/i,
       /\bromantic/i,
+      /\bmarry/i,
+      /\bgirlfriend\b/i,
+      /\bboyfriend\b/i,
+      /\bconfess/i,
+      /\bwife\b/i,
+      /\bhusband\b/i,
       /❤|💕|💗|😘|😍|🥰/
     ]
   },
@@ -43,6 +49,11 @@ const TONE_PATTERNS: { tone: ToneKey; patterns: RegExp[] }[] = [
       /\bhurt\b/i,
       /\bcrying\b/i,
       /\bdepressed/i,
+      /\bfail/i,
+      /\bfrustrat/i,
+      /\boverwel/i,
+      /\bafraid/i,
+      /\bexhaust/i,
       /😢|😭|🥺|💔/
     ]
   },
@@ -64,6 +75,9 @@ const TONE_PATTERNS: { tone: ToneKey; patterns: RegExp[] }[] = [
       /\bwarm\b/i,
       /\bhungry/i,
       /\bhome\b/i,
+      /\bsnack/i,
+      /\bcoffee\b/i,
+      /\bclean/i,
       /🍵|🍳|🏠|☔|🌸/
     ]
   }

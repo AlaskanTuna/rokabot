@@ -178,7 +178,14 @@ export async function generateResponse(options: GenerateOptions): Promise<string
         }
       })
 
-      const responseText = response.text?.trim()
+      // Extract text parts manually to avoid the SDK's console.warn about
+      // non-text parts (e.g. thoughtSignature) in the response.
+      const parts = response.candidates?.[0]?.content?.parts ?? []
+      const responseText = parts
+        .filter((p): p is { text: string } => typeof p.text === 'string' && !p.thought)
+        .map((p) => p.text)
+        .join('')
+        .trim()
 
       if (!responseText) {
         logger.warn('Empty response from Gemini')
@@ -199,8 +206,8 @@ function getRandomFallback(): string {
   const fallbacks = [
     'Hmm? Sorry, I spaced out for a moment there~',
     'Ah, what was that? I got distracted by something.',
-    'Fufu~ my mind wandered. Say that again?',
-    "Mou, I wasn't paying attention... don't tell anyone, okay?"
+    'Ahaha, my mind wandered. Say that again?',
+    "I wasn't paying attention... don't tell anyone, okay?"
   ]
   return fallbacks[Math.floor(Math.random() * fallbacks.length)]
 }

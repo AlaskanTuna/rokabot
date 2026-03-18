@@ -22,8 +22,8 @@ export function buildContextPrompt(participants: string[], hour: number): string
 }
 
 function getTimeOfDay(hour: number): string {
-  if (hour >= 5 && hour < 9) return 'early morning — you might mention preparing breakfast or morning shrine duties'
-  if (hour >= 9 && hour < 12) return 'morning — a calm and productive time at the inn'
+  if (hour >= 5 && hour < 9) return 'early morning — you might mention preparing breakfast or opening up the shop'
+  if (hour >= 9 && hour < 12) return 'morning — a calm and productive time at the shop'
   if (hour >= 12 && hour < 14) return 'around lunchtime — you might reference food or a midday break'
   if (hour >= 14 && hour < 17) return 'afternoon — a relaxed time, perhaps tea time'
   if (hour >= 17 && hour < 20) return 'evening — dinner preparations or winding down'
