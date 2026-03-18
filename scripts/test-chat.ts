@@ -28,6 +28,7 @@ if (!process.env.GEMINI_API_KEY) {
 const { generateResponse } = await import('../src/agent/roka.js')
 const { detectTone } = await import('../src/agent/toneDetector.js')
 const { config } = await import('../src/config.js')
+const { logger } = await import('../src/utils/logger.js')
 
 type WindowMessage = import('../src/session/types.js').WindowMessage
 
@@ -85,6 +86,7 @@ function main(): void {
   console.log('  Talking to Maniwa Roka via the full prompt pipeline.')
   console.log(`  Display name: ${displayName}`)
   console.log(`  History window: ${MAX_HISTORY} messages`)
+  console.log(`  Log level: ${config.logging.level} (set LOG_LEVEL in .env to change)`)
   console.log('  Type "quit" or "exit" to end. Ctrl+C also works.')
   console.log('='.repeat(60))
   console.log()
