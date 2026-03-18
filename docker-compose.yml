@@ -1,0 +1,11 @@
+services:
+  roka:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    mem_limit: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
