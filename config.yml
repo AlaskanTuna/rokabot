@@ -22,7 +22,7 @@ discord:
 # Uses IANA timezone identifiers. Examples:
 #   Asia/Tokyo, Asia/Shanghai, America/New_York, Europe/London, UTC
 # If invalid or omitted, falls back to the system's local timezone.
-timezone: Asia/Kuala_Lumpur
+timezone: Asia/Singapore
 
 logging:
   level: info # pino log level (debug/info/warn/error)

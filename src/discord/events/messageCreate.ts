@@ -209,7 +209,7 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
 
       for (let i = 1; i < chunks.length; i++) {
         if ('send' in message.channel) {
-          await message.channel.send(chunks[i])
+          await message.channel.send(buildRokaMessage(chunks[i], tone))
         }
       }
     } catch (error) {

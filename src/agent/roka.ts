@@ -257,7 +257,7 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
         contents,
         config: {
           systemInstruction: systemPrompt,
-          maxOutputTokens: 512,
+          maxOutputTokens: Math.ceil(config.discord.maxMessageLength / 4),
           temperature: 0.9,
           topP: 0.95,
           httpOptions: { timeout: config.gemini.timeout },

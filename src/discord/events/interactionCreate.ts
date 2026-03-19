@@ -85,7 +85,7 @@ export function createInteractionHandler(rateLimiter: RateLimiter) {
       await interaction.editReply(buildRokaMessage(chunks[0], tone))
 
       for (let i = 1; i < chunks.length; i++) {
-        await interaction.followUp({ content: chunks[i] })
+        await interaction.followUp(buildRokaMessage(chunks[i], tone))
       }
     } catch (error) {
       if (error instanceof DiscordAPIError) {
