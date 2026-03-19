@@ -3,9 +3,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { load } from 'js-yaml'
 
-// ---------------------------------------------------------------------------
 // 1. Load secrets from environment
-// ---------------------------------------------------------------------------
 
 function requiredEnv(key: string): string {
   const value = process.env[key]
@@ -15,12 +13,10 @@ function requiredEnv(key: string): string {
   return value
 }
 
-// ---------------------------------------------------------------------------
 // 2. Load tunables from config.yml
-// ---------------------------------------------------------------------------
 
 interface YamlConfig {
-  gemini?: { model?: string; timeout?: number; maxRetries?: number }
+  gemini?: { model?: string; timeout?: number; maxRetries?: number; maxOutputTokens?: number }
   rateLimit?: { rpm?: number; rpd?: number }
   session?: { ttl?: number; windowSize?: number }
   discord?: { maxMessageLength?: number }
@@ -46,9 +42,7 @@ function loadYamlConfig(): YamlConfig {
 
 const yaml = loadYamlConfig()
 
-// ---------------------------------------------------------------------------
 // 3. Env-var overrides (backward compat)
-// ---------------------------------------------------------------------------
 
 function envInt(key: string): number | undefined {
   const raw = process.env[key]
@@ -64,9 +58,7 @@ function envString(key: string): string | undefined {
   return process.env[key] || undefined
 }
 
-// ---------------------------------------------------------------------------
 // 4. Merged config object
-// ---------------------------------------------------------------------------
 
 export const config = {
   discord: {
@@ -78,7 +70,8 @@ export const config = {
     apiKey: requiredEnv('GEMINI_API_KEY'),
     model: envString('GEMINI_MODEL') ?? yaml.gemini?.model ?? 'gemini-2.0-flash-lite',
     timeout: envInt('GEMINI_TIMEOUT') ?? yaml.gemini?.timeout ?? 15_000,
-    maxRetries: envInt('GEMINI_MAX_RETRIES') ?? yaml.gemini?.maxRetries ?? 1
+    maxRetries: envInt('GEMINI_MAX_RETRIES') ?? yaml.gemini?.maxRetries ?? 1,
+    maxOutputTokens: envInt('GEMINI_MAX_OUTPUT_TOKENS') ?? yaml.gemini?.maxOutputTokens ?? 300
   },
   logging: {
     level: envString('LOG_LEVEL') ?? yaml.logging?.level ?? 'info'

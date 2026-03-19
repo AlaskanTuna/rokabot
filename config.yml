@@ -6,6 +6,7 @@ gemini:
   model: gemini-3.1-flash-lite-preview
   timeout: 15000 # ms, request timeout
   maxRetries: 1 # max retry attempts for transient errors
+  maxOutputTokens: 300 # max tokens for Gemini response (~1200 chars); min 300 to avoid cutoff.
 
 rateLimit:
   rpm: 15 # requests per minute
@@ -16,7 +17,7 @@ session:
   windowSize: 10 # FIFO message window size
 
 discord:
-  maxMessageLength: 1000 # Discord message char limit
+  maxMessageLength: 1500 # Discord message char limit
 
 # Timezone for Roka's time-of-day awareness (Layer 3 context prompt).
 # Uses IANA timezone identifiers. Examples:
