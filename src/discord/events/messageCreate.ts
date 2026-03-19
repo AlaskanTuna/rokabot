@@ -68,13 +68,20 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
     }
 
     logger.info({ channelId, trigger: isMentioned ? 'mention' : 'reply' }, 'Message trigger detected')
+    logger.debug({ channelId, content, imageCount: imageAttachments.length }, 'Message content extracted')
 
     if (!rateLimiter.tryConsume()) {
+      logger.debug(
+        { channelId, remainingRpm: rateLimiter.remainingRpm, remainingRpd: rateLimiter.remainingRpd },
+        'Rate limit hit — declining'
+      )
+
       await message.reply(getRandomDecline())
       return
     }
 
     if (isChannelBusy(channelId)) {
+      logger.debug({ channelId }, 'Channel busy — sending busy message')
       await message.reply(getRandomBusy())
       return
     }
@@ -97,6 +104,8 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
       const history = getHistory(channelId)
       const participants = [...new Set(history.map((m) => m.displayName))]
 
+      logger.debug({ channelId, historySize: history.length, participants }, 'Calling Gemini')
+
       const { text: responseText, tone } = await generateResponse({
         userMessage: content || '(shared an image)',
         displayName,
@@ -112,7 +121,10 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
         timestamp: Date.now()
       })
 
+      logger.debug({ channelId, tone, responseLength: responseText.length }, 'Gemini response received')
+
       const chunks = splitResponse(responseText)
+      logger.debug({ channelId, chunkCount: chunks.length }, 'Response split into chunks')
       await message.reply(buildRokaMessage(chunks[0], tone))
 
       for (let i = 1; i < chunks.length; i++) {

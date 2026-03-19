@@ -27,13 +27,20 @@ export function createInteractionHandler(rateLimiter: RateLimiter) {
     }
 
     logger.info({ channelId, command: 'chat' }, 'Slash command received')
+    logger.debug({ channelId, message, hasImage: !!attachment }, 'Slash command details')
 
     if (!rateLimiter.tryConsume()) {
+      logger.debug(
+        { channelId, remainingRpm: rateLimiter.remainingRpm, remainingRpd: rateLimiter.remainingRpd },
+        'Rate limit hit — declining'
+      )
+
       await interaction.reply({ content: getRandomDecline() })
       return
     }
 
     if (isChannelBusy(channelId)) {
+      logger.debug({ channelId }, 'Channel busy — sending busy message')
       await interaction.reply({ content: getRandomBusy() })
       return
     }
@@ -54,6 +61,8 @@ export function createInteractionHandler(rateLimiter: RateLimiter) {
       const history = getHistory(channelId)
       const participants = [...new Set(history.map((m) => m.displayName))]
 
+      logger.debug({ channelId, historySize: history.length, participants }, 'Calling Gemini')
+
       const { text: responseText, tone } = await generateResponse({
         userMessage: message,
         displayName,
@@ -69,7 +78,10 @@ export function createInteractionHandler(rateLimiter: RateLimiter) {
         timestamp: Date.now()
       })
 
+      logger.debug({ channelId, tone, responseLength: responseText.length }, 'Gemini response received')
+
       const chunks = splitResponse(responseText)
+      logger.debug({ channelId, chunkCount: chunks.length }, 'Response split into chunks')
       await interaction.editReply(buildRokaMessage(chunks[0], tone))
 
       for (let i = 1; i < chunks.length; i++) {

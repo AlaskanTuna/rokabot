@@ -230,6 +230,11 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
       }
     ]
 
+    logger.debug(
+      { model: config.gemini.model, historyLength: contents.length - 1, hasImages: imageParts.length > 0 },
+      'Sending Gemini request'
+    )
+
     const text = await callWithRetry(async (signal: AbortSignal) => {
       const response = await ai.models.generateContent({
         model: config.gemini.model,
@@ -257,6 +262,7 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
         return getRandomFallback()
       }
 
+      logger.debug({ responseLength: responseText.length }, 'Gemini raw response extracted')
       return responseText
     })
 
