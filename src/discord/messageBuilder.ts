@@ -7,7 +7,7 @@ import { getExpressionUrl } from './expressions.js'
 
 export function buildRokaMessage(text: string, tone: ToneKey) {
   const style = getToneStyle(tone)
-  const imageUrl = getExpressionUrl(tone) || style.imageUrl
+  const imageUrl = getExpressionUrl(text, tone) || style.imageUrl
 
   const section = new SectionBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text))
 
