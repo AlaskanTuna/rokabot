@@ -91,5 +91,5 @@ export const config = {
     ttlMs: envInt('SESSION_TTL_MS') ?? yaml.session?.ttl ?? 300_000,
     windowSize: envInt('SESSION_WINDOW_SIZE') ?? yaml.session?.windowSize ?? 10
   },
-  timezone: envString('TZ') ?? yaml.timezone ?? undefined
+  timezone: (envString('TZ') ?? yaml.timezone) as string | undefined
 } as const
