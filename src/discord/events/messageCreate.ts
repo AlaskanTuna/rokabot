@@ -3,6 +3,7 @@ import { DiscordAPIError } from 'discord.js'
 import { logger } from '../../utils/logger.js'
 import { RateLimiter } from '../../utils/rateLimiter.js'
 import { getRandomBusy, getRandomDecline, getRandomEmptyMention, getRandomError, splitResponse } from '../responses.js'
+import { buildRokaMessage } from '../messageBuilder.js'
 import { addMessage, getHistory, getOrCreateSession } from '../../session/sessionManager.js'
 import { generateResponse, type ImageAttachment } from '../../agent/roka.js'
 import { isChannelBusy, markBusy, markFree } from '../concurrency.js'
@@ -96,7 +97,7 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
       const history = getHistory(channelId)
       const participants = [...new Set(history.map((m) => m.displayName))]
 
-      const response = await generateResponse({
+      const { text: responseText, tone } = await generateResponse({
         userMessage: content || '(shared an image)',
         displayName,
         channelHistory: history.slice(0, -1),
@@ -107,12 +108,12 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
       addMessage(channelId, {
         role: 'assistant',
         displayName: 'Roka',
-        content: response,
+        content: responseText,
         timestamp: Date.now()
       })
 
-      const chunks = splitResponse(response)
-      await message.reply(chunks[0])
+      const chunks = splitResponse(responseText)
+      await message.reply(buildRokaMessage(chunks[0], tone))
 
       for (let i = 1; i < chunks.length; i++) {
         if ('send' in message.channel) {

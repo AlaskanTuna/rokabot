@@ -3,6 +3,7 @@ import { DiscordAPIError } from 'discord.js'
 import { logger } from '../../utils/logger.js'
 import { RateLimiter } from '../../utils/rateLimiter.js'
 import { getRandomBusy, getRandomDecline, getRandomError, splitResponse } from '../responses.js'
+import { buildRokaMessage } from '../messageBuilder.js'
 import { addMessage, getHistory, getOrCreateSession } from '../../session/sessionManager.js'
 import { generateResponse, type ImageAttachment } from '../../agent/roka.js'
 import { isChannelBusy, markBusy, markFree } from '../concurrency.js'
@@ -53,7 +54,7 @@ export function createInteractionHandler(rateLimiter: RateLimiter) {
       const history = getHistory(channelId)
       const participants = [...new Set(history.map((m) => m.displayName))]
 
-      const response = await generateResponse({
+      const { text: responseText, tone } = await generateResponse({
         userMessage: message,
         displayName,
         channelHistory: history.slice(0, -1),
@@ -64,12 +65,12 @@ export function createInteractionHandler(rateLimiter: RateLimiter) {
       addMessage(channelId, {
         role: 'assistant',
         displayName: 'Roka',
-        content: response,
+        content: responseText,
         timestamp: Date.now()
       })
 
-      const chunks = splitResponse(response)
-      await interaction.editReply({ content: chunks[0] })
+      const chunks = splitResponse(responseText)
+      await interaction.editReply(buildRokaMessage(chunks[0], tone))
 
       for (let i = 1; i < chunks.length; i++) {
         await interaction.followUp({ content: chunks[i] })
