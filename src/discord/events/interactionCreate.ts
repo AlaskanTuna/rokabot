@@ -95,7 +95,8 @@ export function createInteractionHandler(rateLimiter: RateLimiter) {
           return
         }
       }
-      logger.error({ error, channelId }, 'Error handling /chat command')
+      const errDetail = error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error
+      logger.error({ error: errDetail, channelId }, 'Error handling /chat command')
       try {
         await interaction.editReply({ content: getRandomError() })
       } catch (replyError) {

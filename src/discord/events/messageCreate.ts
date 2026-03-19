@@ -8,6 +8,51 @@ import { addMessage, getHistory, getOrCreateSession } from '../../session/sessio
 import { generateResponse, type ImageAttachment } from '../../agent/roka.js'
 import { isChannelBusy, markBusy, markFree } from '../concurrency.js'
 
+// Components V2 type constants (TextDisplay=10, Section=9, Container=17)
+const TEXT_DISPLAY = 10
+const SECTION = 9
+const CONTAINER = 17
+
+interface RawComponent {
+  type: number
+  content?: string
+  components?: RawComponent[]
+  label?: string
+}
+
+/**
+ * Recursively extract text content from Discord message components.
+ * Handles Components V2 (Container, Section, TextDisplay) and standard ActionRow buttons.
+ */
+function extractComponentTexts(components: Message['components']): string[] {
+  const texts: string[] = []
+
+  function walk(items: RawComponent[]) {
+    for (const item of items) {
+      if (item.type === TEXT_DISPLAY && typeof item.content === 'string') {
+        texts.push(item.content)
+      }
+      if (item.type === CONTAINER || item.type === SECTION) {
+        if (item.components) walk(item.components)
+      }
+      // Standard ActionRow button labels
+      if (item.label) {
+        texts.push(item.label)
+      }
+      // Recurse into any nested components
+      if (item.components && item.type !== CONTAINER && item.type !== SECTION) {
+        walk(item.components)
+      }
+    }
+  }
+
+  // Convert to raw JSON to avoid type conflicts between V1 and V2 component types
+  const raw = components.map((c) => c.toJSON()) as unknown as RawComponent[]
+  walk(raw)
+
+  return texts
+}
+
 export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
   return async function handleMessageCreate(message: Message): Promise<void> {
     if (message.author.bot) return
@@ -45,20 +90,55 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
       // Build context prefix from the referenced message
       const refParts: string[] = []
       if (refContent) refParts.push(refContent)
+
+      // Extract text from embeds (link previews, Twitter/X, YouTube, bot embeds, etc.)
+      for (const embed of referencedMessage.embeds) {
+        const embedParts: string[] = []
+        if (embed.author?.name) embedParts.push(`Author: ${embed.author.name}`)
+        if (embed.title) embedParts.push(`Title: ${embed.title}`)
+        if (embed.description) embedParts.push(embed.description)
+        for (const field of embed.fields) {
+          embedParts.push(`${field.name}: ${field.value}`)
+        }
+        if (embed.footer?.text) embedParts.push(`Footer: ${embed.footer.text}`)
+        if (embedParts.length > 0) {
+          refParts.push(`[Embed: ${embedParts.join(' | ')}]`)
+        }
+      }
+
+      // Extract text from Components V2 containers (other bots using container messages)
+      if (referencedMessage.components.length > 0) {
+        const componentTexts = extractComponentTexts(referencedMessage.components)
+        if (componentTexts.length > 0) {
+          refParts.push(`[Container: ${componentTexts.join(' | ')}]`)
+        }
+      }
+
       if (referencedMessage.attachments.size > 0) refParts.push('(attached image(s))')
 
       if (refParts.length > 0) {
-        const refContext = `[Replying to ${refAuthor}: ${refParts.join(' ')}]`
+        const refContext = `[Replying to ${refAuthor}: ${refParts.join('\n')}]`
         content = content ? `${refContext}\n${content}` : refContext
       }
 
-      // Also grab images from the referenced message
+      // Grab images from the referenced message — attachments first
       const refImages: ImageAttachment[] = referencedMessage.attachments
         .filter((a) => a.contentType !== null && ALLOWED_IMAGE_TYPES.has(a.contentType))
         .map((a) => ({ url: a.url, contentType: a.contentType! }))
         .slice(0, MAX_IMAGE_ATTACHMENTS - imageAttachments.length)
 
       imageAttachments.push(...refImages)
+
+      // Also grab images from embeds (link preview images, Twitter images, etc.)
+      if (imageAttachments.length < MAX_IMAGE_ATTACHMENTS) {
+        for (const embed of referencedMessage.embeds) {
+          if (imageAttachments.length >= MAX_IMAGE_ATTACHMENTS) break
+          const embedImageUrl = embed.image?.url ?? embed.thumbnail?.url
+          if (embedImageUrl) {
+            imageAttachments.push({ url: embedImageUrl, contentType: 'image/png' })
+          }
+        }
+      }
     }
 
     if (!content && imageAttachments.length === 0) {
@@ -140,7 +220,9 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
           return
         }
       }
-      logger.error({ error, channelId }, 'Error handling message')
+      const errDetail =
+        error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error
+      logger.error({ error: errDetail, channelId }, 'Error handling message')
       try {
         await message.reply(getRandomError())
       } catch (replyError) {
