@@ -16,7 +16,13 @@ session:
   windowSize: 10 # FIFO message window size
 
 discord:
-  maxMessageLength: 2000 # Discord message char limit
+  maxMessageLength: 1000 # Discord message char limit
+
+# Timezone for Roka's time-of-day awareness (Layer 3 context prompt).
+# Uses IANA timezone identifiers. Examples:
+#   Asia/Tokyo, Asia/Shanghai, America/New_York, Europe/London, UTC
+# If invalid or omitted, falls back to the system's local timezone.
+timezone: Asia/Kuala_Lumpur
 
 logging:
   level: info # pino log level (debug/info/warn/error)

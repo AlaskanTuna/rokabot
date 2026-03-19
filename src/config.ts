@@ -24,6 +24,7 @@ interface YamlConfig {
   rateLimit?: { rpm?: number; rpd?: number }
   session?: { ttl?: number; windowSize?: number }
   discord?: { maxMessageLength?: number }
+  timezone?: string
   logging?: { level?: string }
 }
 
@@ -89,5 +90,6 @@ export const config = {
   session: {
     ttlMs: envInt('SESSION_TTL_MS') ?? yaml.session?.ttl ?? 300_000,
     windowSize: envInt('SESSION_WINDOW_SIZE') ?? yaml.session?.windowSize ?? 10
-  }
+  },
+  timezone: envString('TZ') ?? yaml.timezone ?? undefined
 } as const

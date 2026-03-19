@@ -143,6 +143,22 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * Get the current hour in the configured timezone (from config.yml).
+ * Falls back to the system's local time if no timezone is set or if the timezone is invalid.
+ */
+function getLocalHour(): number {
+  const tz = config.timezone
+  if (!tz) return new Date().getHours()
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: tz })
+    return parseInt(formatter.format(new Date()), 10)
+  } catch {
+    logger.warn({ timezone: tz }, 'Invalid timezone in config, falling back to system time')
+    return new Date().getHours()
+  }
+}
+
+/**
  * Call the Gemini API with a configurable timeout and retry for transient errors.
  * Timeouts are NOT retried (they indicate the model is stuck).
  */
@@ -187,7 +203,7 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
   const { userMessage, displayName, channelHistory, participants, imageAttachments } = options
 
   const tone = detectTone(channelHistory)
-  const hour = new Date().getHours()
+  const hour = getLocalHour()
 
   const assemblerInput: AssemblerInput = { tone, participants, hour, displayName }
   const systemPrompt = assembleSystemPrompt(assemblerInput)
