@@ -1,6 +1,7 @@
 import { logger } from '../utils/logger.js'
 import { assembleSystemPrompt, type AssemblerInput } from './promptAssembler.js'
 import { detectTone } from './toneDetector.js'
+import type { ToneKey } from './prompts/tones.js'
 import type { WindowMessage } from '../session/types.js'
 import { config } from '../config.js'
 
@@ -21,6 +22,11 @@ interface GenerateOptions {
   channelHistory: WindowMessage[]
   participants: string[]
   imageAttachments?: ImageAttachment[]
+}
+
+export interface GenerateResult {
+  text: string
+  tone: ToneKey
 }
 
 /** Maximum image size in bytes (4 MB). Images larger than this are skipped. */
@@ -177,7 +183,7 @@ async function callWithRetry(generateFn: (signal: AbortSignal) => Promise<string
   throw new Error('Gemini retry loop exited unexpectedly')
 }
 
-export async function generateResponse(options: GenerateOptions): Promise<string> {
+export async function generateResponse(options: GenerateOptions): Promise<GenerateResult> {
   const { userMessage, displayName, channelHistory, participants, imageAttachments } = options
 
   const tone = detectTone(channelHistory)
@@ -254,7 +260,7 @@ export async function generateResponse(options: GenerateOptions): Promise<string
       return responseText
     })
 
-    return stripRokaPrefix(text)
+    return { text: stripRokaPrefix(text), tone }
   } catch (error) {
     logger.error({ error }, 'Gemini API call failed')
     throw error
