@@ -161,26 +161,23 @@ flowchart TD
 <details>
 <summary><h3>Tone Detection</h3></summary>
 
-The tone detector scans the last 3 messages for keyword matches (zero LLM cost):
+The tone detector evaluates the last 3 user messages against priority-ordered regular expressions, requiring at least 2 pattern matches to trigger a specific tone (zero LLM cost). If no thresholds are met during the cascading fallback, it defaults to the playful tone.
 
 ```mermaid
-flowchart LR
-    Input(["Last 3 messages"]) --> Scan["Keyword scan\n(≥2 pattern matches)"]
-    Scan --> F{flustered?}
-    F -->|Yes| RF([🫣 flustered])
-    F -->|No| T{tender?}
-    T -->|Yes| RT([🥹 tender])
-    T -->|No| A{annoyed?}
-    A -->|Yes| RA([😤 annoyed])
-    A -->|No| S{sincere?}
-    S -->|Yes| RS([😢 sincere])
-    S -->|No| D{domestic?}
-    D -->|Yes| RD([🏠 domestic])
-    D -->|No| C{curious?}
-    C -->|Yes| RC([🤔 curious])
-    C -->|No| CO{confident?}
-    CO -->|Yes| RCO([😌 confident])
-    CO -->|No| P([😊 playful])
+flowchart TD
+    Input(["Last 3 user messages"]) --> Scan["Regex Keyword Scan\n(Requires ≥2 unique matches)"]
+
+    Scan --> CheckFlustered{1. Flustered matches?}
+    CheckFlustered -->|Yes| RF([🫣 Flustered])
+    CheckFlustered -->|No| CheckTender{2. Tender matches?}
+
+    CheckTender -->|Yes| RT([🥹 Tender])
+    CheckTender -->|No| CheckNext{"..."}
+
+    CheckNext -->|Continues through\npriority list...| CheckConfident{7. Confident matches?}
+
+    CheckConfident -->|Yes| RCO([😌 Confident])
+    CheckConfident -->|No| Fallback(["😊 Playful (Default)"])
 ```
 
 </details>
