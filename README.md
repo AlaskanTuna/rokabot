@@ -126,56 +126,15 @@ Secrets live in `.env`, tunables live in `config.yml`.
 ## High-Level Architecture
 
 ```mermaid
-graph LR
-    User((User))
-
-    subgraph DGL["Discord Gateway Layer"]
-        direction LR
-        Triggers["/chat · @mention · reply"]
-        RL["Rate Limiter\n(Token Bucket RPM + Daily RPD)"]
-        CG["Concurrency Guard\n(1 active req per channel)"]
-        Triggers --> RL --> CG
-    end
-
-    subgraph SM["Session Manager (In-Memory)"]
-        direction LR
-        Map["channelId → ChannelSession"]
-        FIFO["10-Message FIFO Window"]
-        TTL["5-min Idle TTL"]
-        Map --- FIFO
-        Map --- TTL
-    end
-
-    subgraph RA["Roka Agent"]
-        direction LR
-        TD["Tone Detector\n(Rule-based keyword scan)"]
-        PA["Prompt Assembler"]
-        subgraph PL["4-Layer Prompt System (~1000-1600 tokens)"]
-            L0["L0: Core Identity"]
-            L1["L1: Speech Patterns"]
-            L2["L2: Tone Variant"]
-            L3["L3: Context\n(Time of Day · Participants)"]
-        end
-        TD --> PA
-        PA --> PL
-    end
-
-    subgraph RP["Response Pipeline"]
-        direction LR
-        MB["Message Builder\n(Discord Components V2)"]
-        TS["Tone Styles + Expressions"]
-        SR["Response Splitter\n(≤2000 chars)"]
-        MB --> TS --> SR
-    end
-
-    Gemini["Gemini 3.1 Flash Lite\n(15 RPM · 500 RPD)"]
-
-    User -->|message| DGL
-    DGL --> SM
-    SM --> RA
-    RA -->|system prompt + history + images| Gemini
-    Gemini -->|response text| RP
-    RP -->|styled reply| User
+graph TD
+    User((User)) -->|"/chat · @mention · reply"| Discord
+    Discord["Discord Layer\nRate limit · Concurrency guard"] --> Session
+    Session["Session Manager\n10-msg window · 5-min TTL"] --> Agent
+    Agent["Roka Agent\n4-layer prompt · Tone detection"] -->|prompt + history| Gemini
+    Gemini["Gemini Flash Lite"] -->|tool call?| Tools
+    Tools["Tools\nDice · Coin · Time · Anime · Weather"] -->|result| Gemini
+    Gemini -->|response| Pipeline
+    Pipeline["Response Pipeline\nComponents V2 · Tone styling"] -->|styled reply| User
 ```
 
 ### End-to-End Pipeline
@@ -183,33 +142,17 @@ graph LR
 How user (client) prompts go through the system (backend) and transform plain messages into rich, character-personalized replies:
 
 ```mermaid
-flowchart LR
-    Start([User sends /chat,\n@mention, or reply])
-    Start --> Extract["Extract message, images,\nchannelId, displayName"]
-    Extract --> RateCheck{Rate limit\navailable?}
-    RateCheck -->|No| Decline([Send decline\nresponse])
-    RateCheck -->|Yes| BusyCheck{Channel\nbusy?}
-    BusyCheck -->|Yes| Busy([Send busy\nresponse])
-    BusyCheck -->|No| EmptyCheck{Has content\nor images?}
-    EmptyCheck -->|No| Empty([Send empty-mention\nresponse])
-    EmptyCheck -->|Yes| Defer["Defer reply / send typing\nMark channel busy"]
-
-    Defer --> Session["Get or create session\nReset 5-min idle timer"]
-    Session --> AddMsg["Add user message to\n10-message FIFO window"]
-    AddMsg --> History["Get channel history\nExtract unique participant names"]
-    History --> Tone["Detect tone via keyword scan\non last 3 messages"]
-
-    Tone --> Assemble["Assemble 4-layer system prompt\nCore + Speech + Tone + Context"]
-    Assemble --> Images["Download & base64-encode images\n(max 3 images, ≤4 MB each)"]
-    Images --> Build["Build Gemini request\n(system prompt + history + user message + images)\ntemp 0.9 · topP 0.95 · maxTokens 250"]
-    Build --> Call["Call Gemini API\nRetry on 429/500/503"]
-    Call --> Process["Strip [Roka] prefix\nFallback if empty"]
-
-    Process --> Store["Add assistant message\nto session window"]
-    Store --> Format["Build Components V2 message\nApply tone color + expression image"]
-    Format --> Split["Split response if\n> 2000 chars"]
-    Split --> Send(["Send styled reply\nto Discord"])
-    Send --> Free["Mark channel free"]
+flowchart TD
+    Start([User message]) --> Guards{Rate limit &\nconcurrency OK?}
+    Guards -->|No| Reject([Decline / busy])
+    Guards -->|Yes| Session["Get/create session\nAdd to FIFO window"]
+    Session --> Prompt["Assemble prompt\nDetect tone · Build 4 layers"]
+    Prompt --> Gemini["Send to Gemini\n+ tool declarations"]
+    Gemini --> ToolCheck{Tool call?}
+    ToolCheck -->|Yes| Execute["Execute tool\n(up to 3 chained calls)"]
+    Execute --> Gemini
+    ToolCheck -->|No| Format["Build Components V2 reply\nTone color + expression"]
+    Format --> Send([Send to Discord])
 ```
 
 ### Tone Detection
@@ -218,23 +161,47 @@ The tone detector scans the last 3 messages for keyword matches (zero LLM cost):
 
 ```mermaid
 flowchart LR
-    Input(["Last 3 messages\nfrom session window"]) --> Join["Concatenate all\nmessage content"]
-    Join --> F{"🫣 flustered?\n≥2 of 19 patterns\n(love, crush, kiss, date, ❤️ ...)"}
-    F -->|Match| RF([flustered])
-    F -->|No| T{"🥹 tender?\n≥2 of 15 patterns\n(miss, worried, thank you, stay safe ...)"}
-    T -->|Match| RT([tender])
-    T -->|No| A{"😤 annoyed?\n≥2 of 15 patterns\n(refuse, whatever, boring, skipped lunch ...)"}
-    A -->|Match| RA([annoyed])
-    A -->|No| S{"😢 sincere?\n≥2 of 15 patterns\n(sad, lonely, stressed, sorry, 😭 ...)"}
-    S -->|Match| RS([sincere])
-    S -->|No| D{"🏠 domestic?\n≥2 of 19 patterns\n(food, cook, tea, sleep, weather, 🍵 ...)"}
-    D -->|Match| RD([domestic])
-    D -->|No| C{"🤔 curious?\n≥2 of 12 patterns\n(what, how, why, explain, wonder ...)"}
-    C -->|Match| RC([curious])
-    C -->|No| CO{"😌 confident?\n≥2 of 13 patterns\n(leave it to me, trust me, help me ...)"}
-    CO -->|Match| RCO([confident])
-    CO -->|No| P(["😊 playful\n(default fallback)"])
+    Input(["Last 3 messages"]) --> Scan["Keyword scan\n(≥2 pattern matches)"]
+    Scan --> F{flustered?}
+    F -->|Yes| RF([🫣 flustered])
+    F -->|No| T{tender?}
+    T -->|Yes| RT([🥹 tender])
+    T -->|No| A{annoyed?}
+    A -->|Yes| RA([😤 annoyed])
+    A -->|No| S{sincere?}
+    S -->|Yes| RS([😢 sincere])
+    S -->|No| D{domestic?}
+    D -->|Yes| RD([🏠 domestic])
+    D -->|No| C{curious?}
+    C -->|Yes| RC([🤔 curious])
+    C -->|No| CO{confident?}
+    CO -->|Yes| RCO([😌 confident])
+    CO -->|No| P([😊 playful])
 ```
+
+### Tone Styling
+
+After tone detection, the response pipeline maps the detected tone to a visual style (accent color + character expression):
+
+```mermaid
+flowchart TD
+    Tone([Detected tone]) --> Color["Map to accent color"]
+    Tone --> Expr["Pick random expression\nfrom tone's pool"]
+    Color --> Build["Build Components V2"]
+    Expr --> Build
+    Build --> Msg["Container\nColored border + text + thumbnail"]
+```
+
+| Tone         | Color              | Expression Pool                   |
+| ------------ | ------------------ | --------------------------------- |
+| 😊 playful   | `#FFB3D9` pink     | smile, cheerful, delighted        |
+| 😢 sincere   | `#A8D8FF` blue     | sad, downcast, melancholy         |
+| 🏠 domestic  | `#FFD4B5` peach    | gentle smile, content, serene     |
+| 🫣 flustered | `#FFB3B3` red      | flustered, nervous, awkward       |
+| 🤔 curious   | `#B2EBF2` cyan     | thinking, surprised, blank stare  |
+| 😤 annoyed   | `#F8B4B8` rose     | exasperated, frustrated, resigned |
+| 🥹 tender    | `#E1BEE7` lavender | worried, troubled, gentle smile   |
+| 😌 confident | `#C8E6C9` mint     | composed, explaining, attentive   |
 
 ---
 
@@ -246,25 +213,36 @@ rokabot/
 │   ├── index.ts                       # Entry point, signal handling, graceful shutdown
 │   ├── config.ts                      # Config loader (.env secrets + config.yml tunables)
 │   ├── agent/
-│   │   ├── roka.ts                    # Gemini API integration, retry logic, response processing
+│   │   ├── roka.ts                    # Gemini API integration, function calling loop
 │   │   ├── toneDetector.ts            # Rule-based tone detection (keyword matching)
 │   │   ├── promptAssembler.ts         # 4-layer prompt combiner
 │   │   ├── prompts/
 │   │   │   ├── core.ts                # Layer 0: Core identity & personality
 │   │   │   ├── speech.ts              # Layer 1: Speech patterns & formatting rules
-│   │   │   ├── tones.ts               # Layer 2: Tone variants (playful/sincere/domestic/flustered)
-│   │   │   └── context.ts             # Layer 3: Dynamic channel context (time, participants)
-│   │   └── __tests__/                 # Tone detector & prompt assembler tests
+│   │   │   ├── tones.ts               # Layer 2: Tone variants (8 moods)
+│   │   │   └── context.ts             # Layer 3: Dynamic context (time, participants)
+│   │   ├── tools/
+│   │   │   ├── index.ts               # Tool declarations + dispatcher
+│   │   │   ├── rollDice.ts            # NdM dice roller
+│   │   │   ├── flipCoin.ts            # Coin flip
+│   │   │   ├── getCurrentTime.ts      # Timezone-aware clock
+│   │   │   ├── searchAnime.ts         # Jikan anime search (sort, filter, limit)
+│   │   │   ├── getAnimeSchedule.ts    # Jikan schedule (day/week/season scope)
+│   │   │   ├── getWeather.ts          # Open-Meteo weather lookup
+│   │   │   └── jikanThrottle.ts       # Jikan API rate limiter (3 req/s)
+│   │   └── __tests__/                 # Agent + tool tests
 │   ├── discord/
-│   │   ├── client.ts                  # discord.js client setup (intents, partials, events)
+│   │   ├── client.ts                  # discord.js client setup (intents, partials)
 │   │   ├── concurrency.ts             # Per-channel concurrency guard
-│   │   ├── responses.ts               # In-character message pools (decline, busy, error, empty)
+│   │   ├── responses.ts               # In-character message pools
 │   │   ├── commands/
-│   │   │   └── chat.ts                # /chat slash command definition
+│   │   │   ├── chat.ts                # /chat slash command
+│   │   │   └── tools.ts               # Tool slash commands (/anime, /schedule, etc.)
 │   │   ├── events/
-│   │   │   ├── ready.ts               # Bot login, command registration, presence
-│   │   │   ├── interactionCreate.ts   # /chat slash command handler
-│   │   │   └── messageCreate.ts       # @mention and reply handler
+│   │   │   ├── ready.ts               # Bot login, command registration
+│   │   │   ├── interactionCreate.ts   # Slash command router
+│   │   │   ├── messageCreate.ts       # @mention and reply handler
+│   │   │   └── toolCommands.ts        # Tool command handlers + pagination
 │   │   └── __tests__/                 # Response utilities tests
 │   ├── session/
 │   │   ├── types.ts                   # WindowMessage & ChannelSession interfaces
