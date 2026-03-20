@@ -124,24 +124,91 @@ async function handleAnime(interaction: ChatInputCommandInteraction) {
 
 // Tool: Schedule (via getAnimeSchedule tool)
 async function handleSchedule(interaction: ChatInputCommandInteraction) {
-  const inputDay = interaction.options.getString('day')
+  const scope = (interaction.options.getString('scope') ?? 'day') as 'day' | 'week' | 'season'
+  const day = interaction.options.getString('day') ?? undefined
+  const sortBy = (interaction.options.getString('sort_by') ?? undefined) as
+    | 'score'
+    | 'popularity'
+    | 'members'
+    | 'title'
+    | undefined
+  const limit = interaction.options.getInteger('limit') ?? undefined
+  const anime = interaction.options.getString('anime') ?? undefined
   const flavor = randomFrom(FLAVOR.schedule)
 
-  const result = await getAnimeSchedule({ day: inputDay ?? undefined })
+  const result = await getAnimeSchedule({ scope, day, sort_by: sortBy, limit, anime })
 
   if (result.entries.length === 0) {
-    const text = `${flavor}\n\nHmm, nothing scheduled for ${result.day}~ Maybe it's a quiet day?`
+    const text = `${flavor}\n\nHmm, nothing found for that~ Maybe try something else?`
     return buildToolMessage(text, CURIOUS_COLOR)
   }
 
-  const displayDay = result.day.charAt(0).toUpperCase() + result.day.slice(1)
-  const lines = result.entries.map((anime) => {
-    const score = anime.score ? `\u2B50 ${anime.score}` : ''
-    return `\u2022 **${anime.title}** ${score}`
+  // Specific anime lookup
+  if (anime) {
+    const entry = result.entries[0]
+    const eps = entry.episodes ? `${entry.episodes} eps` : '? eps'
+    const score = entry.score ? `\u2B50 ${entry.score}` : 'No score yet'
+    const broadcastLine =
+      entry.broadcastDay && entry.broadcastTime
+        ? `\uD83D\uDCC5 ${capitalize(entry.broadcastDay)}s at ${entry.broadcastTime} JST`
+        : '\uD83D\uDCC5 Broadcast TBA'
+    const tzLine = entry.broadcastTimezones ? `  \uD83D\uDD50 ${formatTimezoneList(entry.broadcastTimezones)}` : ''
+    const seasonLine = entry.season && entry.year ? `\uD83C\uDF38 ${capitalize(entry.season)} ${entry.year}` : ''
+
+    const lines = [
+      `${flavor}`,
+      '',
+      `\uD83D\uDD0D **${entry.title}**`,
+      `\uD83D\uDCFA ${entry.type} \u2022 ${eps} \u2022 ${score} \u2022 ${entry.status}`,
+      broadcastLine,
+      ...(tzLine ? [tzLine] : []),
+      ...(seasonLine ? [seasonLine] : []),
+      `[\u2197 MAL](${entry.url})`
+    ]
+
+    return buildToolMessage(lines.join('\n'), CURIOUS_COLOR)
+  }
+
+  // List results (day/week/season)
+  const sortLabel = sortBy ? `sorted by ${sortBy}` : 'sorted by score'
+  const header = `\uD83D\uDCC5 **${result.label}** (${sortLabel})`
+
+  const lines = result.entries.map((entry, i) => {
+    const score = entry.score ? `\u2B50 ${entry.score}` : ''
+    const broadcastPart =
+      entry.broadcastDay && entry.broadcastTime
+        ? `${capitalize(entry.broadcastDay)}s at ${entry.broadcastTime} JST`
+        : 'Broadcast TBA'
+    const tzShort = entry.broadcastTimezones ? ` (${formatTimezoneShort(entry.broadcastTimezones)})` : ''
+    return `${i + 1}. **${entry.title}** ${score}\n   ${broadcastPart}${tzShort}`
   })
 
-  const text = `${flavor}\n\n\uD83D\uDCC5 **${displayDay}'s Anime Schedule**\n\n${lines.join('\n')}`
+  const footer = `\nShowing ${result.entries.length} of ${result.total} results`
+  const text = `${flavor}\n\n${header}\n\n${lines.join('\n')}\n${footer}`
   return buildToolMessage(text, CURIOUS_COLOR)
+}
+
+function capitalize(str: string): string {
+  return str.charAt(0).toUpperCase() + str.slice(1)
+}
+
+function formatTimezoneList(tz: Record<string, string>): string {
+  return Object.entries(tz)
+    .map(([zone, time]) => `${time} ${zone}`)
+    .join(' | ')
+}
+
+function formatTimezoneShort(tz: Record<string, string>): string {
+  const preferred = ['EST', 'GMT']
+  const parts: string[] = []
+  for (const key of preferred) {
+    if (tz[key]) parts.push(`${tz[key]} ${key}`)
+  }
+  if (parts.length === 0) {
+    const entries = Object.entries(tz).slice(0, 2)
+    return entries.map(([zone, time]) => `${time} ${zone}`).join(' | ')
+  }
+  return parts.join(' | ')
 }
 
 // Tool: Weather (Open-Meteo API via getWeather tool)

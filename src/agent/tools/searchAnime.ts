@@ -45,7 +45,7 @@ export async function searchAnime(params: SearchAnimeParams): Promise<SearchAnim
   try {
     await jikanThrottle()
 
-    const url = `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(query)}&limit=5&sfw=true`
+    const url = `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(query)}&limit=3&sfw=false`
     const response = await fetch(url)
 
     if (!response.ok) {

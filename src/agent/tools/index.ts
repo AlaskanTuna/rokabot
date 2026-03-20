@@ -61,14 +61,33 @@ export function getToolDeclarations(): FunctionDeclaration[] {
     {
       name: 'get_anime_schedule',
       description:
-        'Get the anime airing schedule for a specific day of the week. Use when someone asks what anime is airing today or on a particular day.',
+        'Get the anime airing schedule. Can check a specific day, the full week, or current season. Can also look up broadcast times for a specific anime by name.',
       parameters: {
         type: Type.OBJECT,
         properties: {
+          scope: {
+            type: Type.STRING,
+            description: 'Time range: day (single day), week (full week), or season (current season). Defaults to day.',
+            enum: ['day', 'week', 'season']
+          },
           day: {
             type: Type.STRING,
-            description: 'Day of the week (monday, tuesday, etc.). Defaults to today.',
+            description: 'Day of the week (only used when scope is day). Defaults to today.',
             enum: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+          },
+          sort_by: {
+            type: Type.STRING,
+            description: 'Sort results by. Defaults to score.',
+            enum: ['score', 'popularity', 'members', 'title']
+          },
+          limit: {
+            type: Type.INTEGER,
+            description: 'Number of results to return (1-25). Defaults to 5.'
+          },
+          anime: {
+            type: Type.STRING,
+            description:
+              'Search for a specific anime by name to get its broadcast schedule. When provided, overrides scope/sort/limit.'
           }
         }
       }

@@ -184,34 +184,92 @@ describe('getAnimeSchedule', () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
+        pagination: { items: { total: 1 } },
         data: [
           {
             title: 'One Piece',
+            title_japanese: 'ONE PIECE',
             type: 'TV',
             episodes: null,
+            status: 'Currently Airing',
             score: 8.7,
+            members: 2600000,
+            popularity: 5,
+            broadcast: { day: 'Sundays', time: '09:30', timezone: 'Asia/Tokyo', string: 'Sundays at 09:30 (JST)' },
+            season: 'fall',
+            year: 1999,
             url: 'https://myanimelist.net/anime/21'
           }
         ]
       })
     })
 
-    const result = await getAnimeSchedule({ day: 'sunday' })
-    expect(result.day).toBe('sunday')
+    const result = await getAnimeSchedule({ scope: 'day', day: 'sunday' })
+    expect(result.scope).toBe('day')
     expect(result.entries).toHaveLength(1)
     expect(result.entries[0].title).toBe('One Piece')
+    expect(result.entries[0].broadcastDay).toBe('Sundays')
+    expect(result.entries[0].broadcastTimezones).toBeTruthy()
   })
 
   it('defaults to today when no day param is provided', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ data: [] })
+      json: async () => ({ pagination: { items: { total: 0 } }, data: [] })
     })
 
-    const result = await getAnimeSchedule({})
+    const result = await getAnimeSchedule({ scope: 'day' })
 
     // 2026-03-20T12:00:00Z is a Friday
-    expect(result.day).toBe('friday')
+    expect(result.label.toLowerCase()).toContain('friday')
+  })
+
+  it('looks up a specific anime when anime param is provided', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        data: [
+          {
+            title: 'Frieren',
+            title_japanese: '葬送のフリーレン',
+            type: 'TV',
+            episodes: 28,
+            status: 'Currently Airing',
+            score: 9.33,
+            members: 430000,
+            popularity: 50,
+            broadcast: { day: 'Fridays', time: '23:30', timezone: 'Asia/Tokyo', string: 'Fridays at 23:30 (JST)' },
+            season: 'fall',
+            year: 2023,
+            url: 'https://myanimelist.net/anime/52991'
+          }
+        ]
+      })
+    })
+
+    const result = await getAnimeSchedule({ scope: 'day', anime: 'Frieren' })
+    expect(result.entries).toHaveLength(1)
+    expect(result.entries[0].title).toBe('Frieren')
+    expect(result.entries[0].broadcastTime).toBe('23:30')
+  })
+
+  it('sorts entries by score descending by default', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        pagination: { items: { total: 3 } },
+        data: [
+          { title: 'Low', score: 5.0, members: 100, popularity: 300 },
+          { title: 'High', score: 9.0, members: 500, popularity: 10 },
+          { title: 'Mid', score: 7.5, members: 300, popularity: 100 }
+        ]
+      })
+    })
+
+    const result = await getAnimeSchedule({ scope: 'day', day: 'monday' })
+    expect(result.entries[0].title).toBe('High')
+    expect(result.entries[1].title).toBe('Mid')
+    expect(result.entries[2].title).toBe('Low')
   })
 })
 
@@ -305,10 +363,10 @@ describe('executeToolCall', () => {
   it('routes get_anime_schedule correctly', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ data: [] })
+      json: async () => ({ pagination: { items: { total: 0 } }, data: [] })
     })
-    const result = (await executeToolCall('get_anime_schedule', { day: 'monday' })) as { day: string }
-    expect(result.day).toBe('monday')
+    const result = (await executeToolCall('get_anime_schedule', { scope: 'day', day: 'monday' })) as { scope: string }
+    expect(result.scope).toBe('day')
   })
 
   it('routes get_weather correctly', async () => {

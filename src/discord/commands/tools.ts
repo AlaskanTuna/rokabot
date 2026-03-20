@@ -38,11 +38,22 @@ export const animeCommand = new SlashCommandBuilder()
 
 export const scheduleCommand = new SlashCommandBuilder()
   .setName('schedule')
-  .setDescription("Check today's anime airing schedule!")
+  .setDescription('Check the anime airing schedule!')
+  .addStringOption((opt) =>
+    opt
+      .setName('scope')
+      .setDescription('Time range to check')
+      .setRequired(true)
+      .addChoices(
+        { name: 'Today', value: 'day' },
+        { name: 'This Week', value: 'week' },
+        { name: 'This Season', value: 'season' }
+      )
+  )
   .addStringOption((opt) =>
     opt
       .setName('day')
-      .setDescription('Day of the week (default: today)')
+      .setDescription('Day of the week (only for "Today" scope)')
       .setRequired(false)
       .addChoices(
         { name: 'Monday', value: 'monday' },
@@ -53,6 +64,32 @@ export const scheduleCommand = new SlashCommandBuilder()
         { name: 'Saturday', value: 'saturday' },
         { name: 'Sunday', value: 'sunday' }
       )
+  )
+  .addStringOption((opt) =>
+    opt
+      .setName('sort_by')
+      .setDescription('Sort results by (default: score)')
+      .setRequired(false)
+      .addChoices(
+        { name: 'Score', value: 'score' },
+        { name: 'Popularity', value: 'popularity' },
+        { name: 'Members', value: 'members' },
+        { name: 'Title', value: 'title' }
+      )
+  )
+  .addIntegerOption((opt) =>
+    opt
+      .setName('limit')
+      .setDescription('Number of results (default: 5)')
+      .setRequired(false)
+      .setMinValue(1)
+      .setMaxValue(25)
+  )
+  .addStringOption((opt) =>
+    opt
+      .setName('anime')
+      .setDescription('Search schedule for a specific anime (overrides other options)')
+      .setRequired(false)
   )
 
 export const weatherCommand = new SlashCommandBuilder()
