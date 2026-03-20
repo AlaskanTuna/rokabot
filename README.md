@@ -27,12 +27,12 @@ All state is in-memory with no persistence. Bot restart = clean slate.
 
 ### Hardware
 
-| Component | Minimum                                        | Recommended           |
-| --------- | ---------------------------------------------- | --------------------- |
-| Board     | Any ARM64/x86_64 host                          | Raspberry Pi 5 (8 GB) |
-| RAM       | 256 MB free                                    | 512 MB free           |
-| Storage   | ~200 MB (image + deps)                         | 1 GB                  |
-| Network   | Stable internet (Discord Gateway + Gemini API) | Wired Ethernet        |
+| Component | Minimum                                        | Recommended                     |
+| --------- | ---------------------------------------------- | ------------------------------- |
+| Board     | Any ARM64/x86_64 host                          | Raspberry Pi 5 (8 GB) or better |
+| RAM       | 256 MB free                                    | 512 MB free                     |
+| Storage   | ~200 MB (image + deps)                         | 1 GB                            |
+| Network   | Stable internet (Discord Gateway + Gemini API) | Wired Ethernet                  |
 
 ### Software
 
@@ -52,12 +52,14 @@ All state is in-memory with no persistence. Bot restart = clean slate.
 
 The Discord application requires the **Message Content** privileged intent enabled.
 
+---
+
 ## Installation
 
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/<your-username>/rokabot.git
+git clone https://github.com/AlaskanTuna/rokabot.git
 cd rokabot
 npm ci
 ```
@@ -101,89 +103,113 @@ npm start
 docker compose up -d
 ```
 
+---
+
 ## Configuration
 
 Secrets live in `.env`, tunables live in `config.yml`.
 
-| YAML Path                  | Env Override                 | Default                 | Description                       |
-| -------------------------- | ---------------------------- | ----------------------- | --------------------------------- |
-| `gemini.model`             | `GEMINI_MODEL`               | `gemini-2.0-flash-lite` | Gemini model name                 |
-| `gemini.timeout`           | `GEMINI_TIMEOUT`             | `15000`                 | Request timeout (ms)              |
-| `gemini.maxRetries`        | `GEMINI_MAX_RETRIES`         | `1`                     | Max retries for transient errors  |
-| `rateLimit.rpm`            | `RATE_LIMIT_RPM`             | `15`                    | Requests per minute               |
-| `rateLimit.rpd`            | `RATE_LIMIT_RPD`             | `500`                   | Requests per day                  |
-| `session.ttl`              | `SESSION_TTL_MS`             | `300000`                | Idle session TTL (ms)             |
-| `session.windowSize`       | `SESSION_WINDOW_SIZE`        | `10`                    | FIFO message window size          |
-| `discord.maxMessageLength` | `DISCORD_MAX_MESSAGE_LENGTH` | `2000`                  | Discord message char limit        |
-| `logging.level`            | `LOG_LEVEL`                  | `info`                  | Log level (debug/info/warn/error) |
+| YAML Path                  | Env Override                 | Default                         | Description                       |
+| -------------------------- | ---------------------------- | ------------------------------- | --------------------------------- |
+| `gemini.model`             | `GEMINI_MODEL`               | `gemini-3.1-flash-lite-preview` | Gemini model name                 |
+| `gemini.timeout`           | `GEMINI_TIMEOUT`             | `15000`                         | Request timeout (ms)              |
+| `gemini.maxRetries`        | `GEMINI_MAX_RETRIES`         | `1`                             | Max retries for transient errors  |
+| `rateLimit.rpm`            | `RATE_LIMIT_RPM`             | `15`                            | Requests per minute               |
+| `rateLimit.rpd`            | `RATE_LIMIT_RPD`             | `500`                           | Requests per day                  |
+| `session.ttl`              | `SESSION_TTL_MS`             | `300000`                        | Idle session TTL (ms)             |
+| `session.windowSize`       | `SESSION_WINDOW_SIZE`        | `10`                            | FIFO message window size          |
+| `discord.maxMessageLength` | `DISCORD_MAX_MESSAGE_LENGTH` | `2000`                          | Discord message char limit        |
+| `logging.level`            | `LOG_LEVEL`                  | `info`                          | Log level (debug/info/warn/error) |
 
-## Architecture
+---
+
+## High-Level Architecture
 
 ```mermaid
-flowchart TB
-    subgraph Discord["Discord Server"]
-        User([User])
+graph TB
+    User((User))
+
+    subgraph DGL["Discord Gateway Layer"]
+        direction TB
+        Triggers["/chat · @mention · reply"]
+        RL["Rate Limiter\n(Token Bucket RPM + Daily RPD)"]
+        CG["Concurrency Guard\n(1 active req per channel)"]
+        Triggers --> RL --> CG
     end
 
-    subgraph Gateway["Discord Gateway Layer"]
+    subgraph SM["Session Manager (In-Memory)"]
         direction TB
-        Triggers["Triggers<br/><code>/chat</code> &bull; @mention &bull; reply"]
-        Attachments["Image Extractor<br/>Up to 3 attachments, 4 MB max each"]
-        RateLimit["Rate Limiter<br/>Token Bucket RPM + Daily RPD"]
-        Concurrency["Concurrency Guard<br/>1 active request per channel"]
-        Triggers --> Attachments --> RateLimit --> Concurrency
-    end
-
-    subgraph Session["Session Manager"]
-        direction TB
-        SessionMap["channelId &rarr; ChannelSession Map"]
+        Map["channelId → ChannelSession"]
         FIFO["10-Message FIFO Window"]
         TTL["5-min Idle TTL"]
-        SessionMap --- FIFO
-        SessionMap --- TTL
+        Map --- FIFO
+        Map --- TTL
     end
 
-    subgraph Agent["Roka Agent"]
+    subgraph RA["Roka Agent"]
         direction TB
-
-        subgraph PromptSystem["4-Layer Prompt System"]
-            direction LR
-            L0["Layer 0<br/><b>Core Identity</b><br/>Personality &amp; boundaries"]
-            L1["Layer 1<br/><b>Speech Patterns</b><br/>Verbal style &amp; formatting"]
-            L2["Layer 2<br/><b>Tone Variant</b><br/>1 of 4 selected"]
-            L3["Layer 3<br/><b>Channel Context</b><br/>Participants &amp; time"]
-            L0 ~~~ L1 ~~~ L2 ~~~ L3
+        TD["Tone Detector\n(Rule-based keyword scan)"]
+        PA["Prompt Assembler"]
+        subgraph PL["4-Layer Prompt System (~1000-1600 tokens)"]
+            L0["L0: Core Identity"]
+            L1["L1: Speech Patterns"]
+            L2["L2: Tone Variant"]
+            L3["L3: Context\n(Time of Day · Participants)"]
         end
-
-        ToneDetect["Tone Detector<br/>Rule-based keyword matching<br/>(zero LLM cost)"]
-        Assembler["Prompt Assembler<br/>~1000-1600 tokens budget"]
-        ToneDetect --> Assembler
-        PromptSystem --> Assembler
+        TD --> PA
+        PA --> PL
     end
 
-    subgraph Gemini["Gemini API"]
-        Model["Gemini Flash Lite<br/>15 RPM &bull; 250K TPM &bull; 500 RPD"]
+    subgraph RP["Response Pipeline"]
+        direction TB
+        MB["Message Builder\n(Discord Components V2)"]
+        TS["Tone Styles + Expressions"]
+        SR["Response Splitter\n(≤2000 chars)"]
+        MB --> TS --> SR
     end
 
-    User -->|message| Gateway
-    Concurrency --> Session
-    Session -->|history + participants| Agent
-    Attachments -->|image data (base64)| Agent
-    Assembler -->|system prompt + history + images| Gemini
-    Gemini -->|response| Agent
-    Agent -->|reply| Gateway
-    Gateway -->|message| User
+    Gemini["Gemini 3.1 Flash Lite\n(15 RPM · 500 RPD)"]
 
-    style Discord fill:#5865F2,color:#fff
-    style Gateway fill:#2d3748,color:#fff
-    style Session fill:#2d3748,color:#fff
-    style Agent fill:#2d3748,color:#fff
-    style Gemini fill:#f59e0b,color:#000
-    style PromptSystem fill:#374151,color:#fff
-    style L0 fill:#4a5568,color:#fff
-    style L1 fill:#4a5568,color:#fff
-    style L2 fill:#4a5568,color:#fff
-    style L3 fill:#4a5568,color:#fff
+    User -->|message| DGL
+    DGL --> SM
+    SM --> RA
+    RA -->|system prompt + history + images| Gemini
+    Gemini -->|response text| RP
+    RP -->|styled reply| User
+```
+
+### End-to-End Pipeline
+
+How user (client) prompts go through the system (backend) and transform plain messages into rich, character-personalized replies:
+
+```mermaid
+flowchart TD
+    Start([User sends /chat, @mention, or reply])
+    Start --> Extract["Extract message, images,\nchannelId, displayName"]
+    Extract --> RateCheck{Rate limit\navailable?}
+    RateCheck -->|No| Decline([Send decline response])
+    RateCheck -->|Yes| BusyCheck{Channel\nbusy?}
+    BusyCheck -->|Yes| Busy([Send busy response])
+    BusyCheck -->|No| EmptyCheck{Has content\nor images?}
+    EmptyCheck -->|No| Empty([Send empty-mention response])
+    EmptyCheck -->|Yes| Defer["Defer reply / send typing\nMark channel busy"]
+
+    Defer --> Session["Get or create session\nReset 5-min idle timer"]
+    Session --> AddMsg["Add user message to\n10-message FIFO window"]
+    AddMsg --> History["Get channel history\nExtract unique participant names"]
+    History --> Tone["Detect tone via keyword scan\non last 3 messages"]
+
+    Tone --> Assemble["Assemble 4-layer system prompt\nCore + Speech + Tone + Context"]
+    Assemble --> Images["Download & base64-encode images\n(max 3 images, ≤4 MB each)"]
+    Images --> Build["Build Gemini request\n(system prompt + history + user message + images)\ntemp 0.9 · topP 0.95 · maxTokens 250"]
+    Build --> Call["Call Gemini API\nRetry on 429/500/503"]
+    Call --> Process["Strip [Roka] prefix\nFallback if empty"]
+
+    Process --> Store["Add assistant message\nto session window"]
+    Store --> Format["Build Components V2 message\nApply tone color + expression image"]
+    Format --> Split["Split response if\n> 2000 chars"]
+    Split --> Send(["Send styled reply\nto Discord"])
+    Send --> Free["Mark channel free"]
 ```
 
 ### Tone Detection
@@ -191,79 +217,26 @@ flowchart TB
 The tone detector scans the last 3 messages for keyword matches (zero LLM cost):
 
 ```mermaid
-flowchart LR
-    Input["Last 3 messages"] --> Check
-
-    Check{"Keyword scan<br/>(threshold: 2 matches)"}
-    Check -->|"love, crush, kiss,<br/>cute, 💕, ❤️, 😍"| Flustered["<b>flustered</b><br/>Stammering, denial,<br/>hidden feelings leak"]
-    Check -->|"sad, lonely, tired,<br/>stress, sorry, 😢, 💔"| Sincere["<b>sincere</b><br/>Warm, genuine,<br/>emotionally present"]
-    Check -->|"food, cook, tea,<br/>breakfast, home, 🍵"| Domestic["<b>domestic</b><br/>Nurturing, cozy,<br/>sweets-shop manager"]
-    Check -->|"no match"| Playful["<b>playful</b><br/>Teasing, friendly<br/>mockery (default)"]
-
-    style Flustered fill:#e53e3e,color:#fff
-    style Sincere fill:#3182ce,color:#fff
-    style Domestic fill:#38a169,color:#fff
-    style Playful fill:#d69e2e,color:#000
+flowchart TD
+    Input(["Last 3 messages\nfrom session window"]) --> Join["Concatenate all\nmessage content"]
+    Join --> F{"🫣 flustered?\n≥2 of 19 patterns\n(love, crush, kiss, date, ❤️ ...)"}
+    F -->|Match| RF([flustered])
+    F -->|No| T{"🥹 tender?\n≥2 of 15 patterns\n(miss, worried, thank you, stay safe ...)"}
+    T -->|Match| RT([tender])
+    T -->|No| A{"😤 annoyed?\n≥2 of 15 patterns\n(refuse, whatever, boring, skipped lunch ...)"}
+    A -->|Match| RA([annoyed])
+    A -->|No| S{"😢 sincere?\n≥2 of 15 patterns\n(sad, lonely, stressed, sorry, 😭 ...)"}
+    S -->|Match| RS([sincere])
+    S -->|No| D{"🏠 domestic?\n≥2 of 19 patterns\n(food, cook, tea, sleep, weather, 🍵 ...)"}
+    D -->|Match| RD([domestic])
+    D -->|No| C{"🤔 curious?\n≥2 of 12 patterns\n(what, how, why, explain, wonder ...)"}
+    C -->|Match| RC([curious])
+    C -->|No| CO{"😌 confident?\n≥2 of 13 patterns\n(leave it to me, trust me, help me ...)"}
+    CO -->|Match| RCO([confident])
+    CO -->|No| P(["😊 playful\n(default fallback)"])
 ```
 
-### Request Lifecycle
-
-```mermaid
-sequenceDiagram
-    actor User
-    participant Discord as Discord Gateway
-    participant RL as Rate Limiter
-    participant CG as Concurrency Guard
-    participant SM as Session Manager
-    participant TD as Tone Detector
-    participant PA as Prompt Assembler
-    participant Gemini as Gemini API
-
-    User->>Discord: /chat, @mention, or reply (+ optional images)
-    Discord->>Discord: Extract image attachments (max 3, ≤4 MB each)
-    Discord->>RL: tryConsume()
-
-    alt Rate limit hit
-        RL-->>Discord: false
-        Discord-->>User: Decline message (in-character)
-    else Allowed
-        RL-->>Discord: true
-        Discord->>CG: isChannelBusy()
-        alt Channel busy
-            CG-->>Discord: true
-            Discord-->>User: "Still thinking..." (in-character)
-        else Channel free
-            CG-->>Discord: false
-            CG->>CG: markBusy(channelId)
-            Discord->>SM: getOrCreateSession()
-            SM-->>Discord: ChannelSession
-            Discord->>SM: addMessage(userMsg)
-            SM-->>Discord: history + participants
-
-            Discord->>TD: detectTone(history)
-            TD-->>Discord: ToneKey
-
-            Discord->>PA: assembleSystemPrompt()
-            PA-->>Discord: system prompt
-
-            opt Images attached
-                Discord->>Discord: Download & base64 encode images
-            end
-
-            Discord->>Gemini: generate(prompt, history, images?)
-
-            alt Transient error (429/500/503)
-                Gemini-->>Discord: error
-                Discord->>Gemini: retry (1 attempt)
-            end
-
-            Gemini-->>Discord: response text
-            Discord->>SM: addMessage(botReply)
-            Discord-->>User: Reply (split if > 2000 chars)
-            CG->>CG: markFree(channelId)
-        end
-    end
-```
+---
 
 ## Project Structure
 
@@ -277,44 +250,36 @@ rokabot/
 │   │   ├── toneDetector.ts            # Rule-based tone detection (keyword matching)
 │   │   ├── promptAssembler.ts         # 4-layer prompt combiner
 │   │   ├── prompts/
-│   │   │   ├── core.ts               # Layer 0: Core identity & personality
-│   │   │   ├── speech.ts             # Layer 1: Speech patterns & formatting rules
-│   │   │   ├── tones.ts              # Layer 2: Tone variants (playful/sincere/domestic/flustered)
-│   │   │   └── context.ts            # Layer 3: Dynamic channel context (time, participants)
+│   │   │   ├── core.ts                # Layer 0: Core identity & personality
+│   │   │   ├── speech.ts              # Layer 1: Speech patterns & formatting rules
+│   │   │   ├── tones.ts               # Layer 2: Tone variants (playful/sincere/domestic/flustered)
+│   │   │   └── context.ts             # Layer 3: Dynamic channel context (time, participants)
 │   │   └── __tests__/                 # Tone detector & prompt assembler tests
 │   ├── discord/
 │   │   ├── client.ts                  # discord.js client setup (intents, partials, events)
-│   │   ├── concurrency.ts            # Per-channel concurrency guard
-│   │   ├── responses.ts              # In-character message pools (decline, busy, error, empty)
+│   │   ├── concurrency.ts             # Per-channel concurrency guard
+│   │   ├── responses.ts               # In-character message pools (decline, busy, error, empty)
 │   │   ├── commands/
-│   │   │   └── chat.ts               # /chat slash command definition
+│   │   │   └── chat.ts                # /chat slash command definition
 │   │   ├── events/
-│   │   │   ├── ready.ts              # Bot login, command registration, presence
-│   │   │   ├── interactionCreate.ts  # /chat slash command handler
-│   │   │   └── messageCreate.ts      # @mention and reply handler
+│   │   │   ├── ready.ts               # Bot login, command registration, presence
+│   │   │   ├── interactionCreate.ts   # /chat slash command handler
+│   │   │   └── messageCreate.ts       # @mention and reply handler
 │   │   └── __tests__/                 # Response utilities tests
 │   ├── session/
 │   │   ├── types.ts                   # WindowMessage & ChannelSession interfaces
-│   │   ├── messageWindow.ts          # FIFO message buffer (push/evict)
-│   │   ├── sessionManager.ts         # Per-channel session lifecycle + idle TTL
+│   │   ├── messageWindow.ts           # FIFO message buffer (push/evict)
+│   │   ├── sessionManager.ts          # Per-channel session lifecycle + idle TTL
 │   │   └── __tests__/                 # Session tests
 │   └── utils/
 │       ├── logger.ts                  # pino structured logger
-│       ├── rateLimiter.ts            # Token bucket (RPM) + daily counter (RPD)
+│       ├── rateLimiter.ts             # Token bucket (RPM) + daily counter (RPD)
 │       └── __tests__/                 # Rate limiter tests
 ├── scripts/
 │   └── test-chat.ts                   # CLI test script for rapid prompt iteration
 ├── assets/
 │   ├── roka-character-bible.md        # Comprehensive character reference
 │   └── app-icon.jpg                   # Bot avatar
-├── docs/                              # Project documentation
-│   ├── PRD.md                         # Product requirements
-│   ├── TRD.md                         # Technical requirements
-│   ├── ROADMAP.md                     # Development phase timeline
-│   ├── PLAN.md                        # Task breakdown & progress
-│   ├── PROGRESS.md                    # Dated implementation log
-│   ├── TEST.md                        # Test execution results
-│   └── ROLES.md                       # Multi-agent workflow roles
 ├── config.yml                         # Tunable configuration (non-secret)
 ├── .env.example                       # Environment variable template
 ├── Dockerfile                         # Multi-stage build (build + slim runtime)
@@ -325,6 +290,8 @@ rokabot/
 ├── vitest.config.ts                   # Vitest test runner config
 └── package.json                       # Dependencies & scripts
 ```
+
+---
 
 ## Commands
 
@@ -350,13 +317,7 @@ docker compose up -d   # Run containerized
 docker compose logs -f # Tail logs
 ```
 
-## Testing
-
-70 unit tests across 7 test suites covering config validation, rate limiting, session management, tone detection, prompt assembly, and response utilities.
-
-```bash
-npm test
-```
+---
 
 ## Docker Deployment
 
@@ -377,6 +338,10 @@ docker compose up -d
 
 The image builds natively on ARM64 (Raspberry Pi 5) with no cross-compilation needed.
 
+---
+
 ## License
 
-All rights reserved.
+MIT. 2026.
+
+---
