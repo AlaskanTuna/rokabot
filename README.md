@@ -137,7 +137,8 @@ graph TD
     Pipeline["Response Pipeline\nComponents V2 · Tone styling"] -->|styled reply| User
 ```
 
-### End-to-End Pipeline
+<details>
+<summary><h3>End-to-End Pipeline</h3></summary>
 
 How user (client) prompts go through the system (backend) and transform plain messages into rich, character-personalized replies:
 
@@ -155,7 +156,10 @@ flowchart TD
     Format --> Send([Send to Discord])
 ```
 
-### Tone Detection
+</details>
+
+<details>
+<summary><h3>Tone Detection</h3></summary>
 
 The tone detector scans the last 3 messages for keyword matches (zero LLM cost):
 
@@ -179,7 +183,10 @@ flowchart LR
     CO -->|No| P([😊 playful])
 ```
 
-### Tone Styling
+</details>
+
+<details>
+<summary><h3>Tone Styling</h3></summary>
 
 After tone detection, the response pipeline maps the detected tone to a visual style (accent color + character expression):
 
@@ -203,9 +210,10 @@ flowchart TD
 | 🥹 tender    | `#E1BEE7` lavender | worried, troubled, gentle smile   |
 | 😌 confident | `#C8E6C9` mint     | composed, explaining, attentive   |
 
----
+</details>
 
-## Project Structure
+<details>
+<summary><h3>Project Structure</h3></summary>
 
 ```
 rokabot/
@@ -268,6 +276,8 @@ rokabot/
 ├── vitest.config.ts                   # Vitest test runner config
 └── package.json                       # Dependencies & scripts
 ```
+
+</details>
 
 ---
 
