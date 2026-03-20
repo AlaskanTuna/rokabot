@@ -7,11 +7,18 @@ import { buildRokaMessage } from '../messageBuilder.js'
 import { addMessage, getHistory, getOrCreateSession } from '../../session/sessionManager.js'
 import { generateResponse, type ImageAttachment } from '../../agent/roka.js'
 import { isChannelBusy, markBusy, markFree } from '../concurrency.js'
+import { createToolCommandHandler } from './toolCommands.js'
 
 export function createInteractionHandler(rateLimiter: RateLimiter) {
+  const handleToolCommand = createToolCommandHandler(rateLimiter)
+
   return async function handleInteractionCreate(interaction: Interaction): Promise<void> {
     if (!interaction.isChatInputCommand()) return
-    if (interaction.commandName !== 'chat') return
+
+    if (interaction.commandName !== 'chat') {
+      await handleToolCommand(interaction)
+      return
+    }
 
     const message = interaction.options.getString('message', true)
     const attachment = interaction.options.getAttachment('image')

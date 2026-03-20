@@ -4,6 +4,7 @@ import { detectTone } from './toneDetector.js'
 import type { ToneKey } from './prompts/tones.js'
 import type { WindowMessage } from '../session/types.js'
 import { config } from '../config.js'
+import { getToolDeclarations, executeToolCall } from './tools/index.js'
 
 /**
  * Roka Agent — wraps Gemini API calls with the layered prompt system.
@@ -28,6 +29,9 @@ export interface GenerateResult {
   text: string
   tone: ToneKey
 }
+
+/** Maximum number of function-calling round trips per request. */
+const MAX_TOOL_CALLS = 3
 
 /** Maximum image size in bytes (4 MB). Images larger than this are skipped. */
 const MAX_IMAGE_SIZE_BYTES = 4 * 1024 * 1024
@@ -252,34 +256,93 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
     )
 
     const text = await callWithRetry(async (signal: AbortSignal) => {
-      const response = await ai.models.generateContent({
-        model: config.gemini.model,
-        contents,
-        config: {
-          systemInstruction: systemPrompt,
-          maxOutputTokens: config.gemini.maxOutputTokens,
-          temperature: 0.9,
-          topP: 0.95,
-          httpOptions: { timeout: config.gemini.timeout },
-          abortSignal: signal
+      const toolDeclarations = getToolDeclarations()
+
+      // Mutable contents array for the function calling loop.
+      // Typed loosely to accommodate functionCall/functionResponse parts alongside text/inlineData parts.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const loopContents: Array<{ role: 'user' | 'model'; parts: any[] }> = [...contents]
+
+      for (let toolIteration = 0; toolIteration < MAX_TOOL_CALLS + 1; toolIteration++) {
+        const response = await ai.models.generateContent({
+          model: config.gemini.model,
+          contents: loopContents,
+          config: {
+            systemInstruction: systemPrompt,
+            maxOutputTokens: config.gemini.maxOutputTokens,
+            temperature: 0.9,
+            topP: 0.95,
+            httpOptions: { timeout: config.gemini.timeout },
+            abortSignal: signal,
+            tools: [{ functionDeclarations: toolDeclarations }]
+          }
+        })
+
+        const parts = response.candidates?.[0]?.content?.parts ?? []
+
+        // Check for function call
+        const functionCallPart = parts.find((p) => 'functionCall' in p && p.functionCall)
+
+        if (functionCallPart && 'functionCall' in functionCallPart && functionCallPart.functionCall) {
+          const { name, args } = functionCallPart.functionCall
+          logger.info({ tool: name, args }, 'Gemini requested tool call')
+
+          if (toolIteration >= MAX_TOOL_CALLS) {
+            logger.warn({ tool: name, iteration: toolIteration }, 'Max tool call iterations reached, returning text')
+            break
+          }
+
+          try {
+            const toolResult = await executeToolCall(name ?? '', (args ?? {}) as Record<string, unknown>)
+            logger.debug({ tool: name, resultKeys: Object.keys(toolResult) }, 'Tool executed successfully')
+
+            // Add the model's function call and our function response to contents
+            loopContents.push({
+              role: 'model' as const,
+              parts: [{ functionCall: { name: name ?? '', args: args ?? {} } }]
+            })
+            loopContents.push({
+              role: 'user' as const,
+              parts: [{ functionResponse: { name: name ?? '', response: toolResult } }]
+            })
+
+            continue // Loop again to get the model's text response
+          } catch (toolError) {
+            logger.error({ tool: name, error: toolError }, 'Tool execution failed')
+            // Send error back to model
+            loopContents.push({
+              role: 'model' as const,
+              parts: [{ functionCall: { name: name ?? '', args: args ?? {} } }]
+            })
+            loopContents.push({
+              role: 'user' as const,
+              parts: [{ functionResponse: { name: name ?? '', response: { error: 'Tool execution failed' } } }]
+            })
+            continue
+          }
         }
-      })
 
-      // Extract the first non-thought text part manually to avoid the SDK's
-      // console.warn about non-text parts (e.g. thoughtSignature). Using only
-      // the first text part prevents duplication when Gemini returns the same
-      // content across multiple parts.
-      const parts = response.candidates?.[0]?.content?.parts ?? []
-      const firstTextPart = parts.find((p): p is { text: string } => typeof p.text === 'string' && !p.thought)
-      const responseText = firstTextPart?.text?.trim() ?? ''
+        // No function call — extract text response
+        const firstTextPart = parts.find(
+          (p): p is { text: string } => typeof p.text === 'string' && !('thought' in p && p.thought)
+        )
+        const responseText = firstTextPart?.text?.trim() ?? ''
 
-      if (!responseText) {
-        logger.warn('Empty response from Gemini')
-        return getRandomFallback()
+        if (!responseText) {
+          logger.warn('Empty response from Gemini')
+          return getRandomFallback()
+        }
+
+        logger.debug(
+          { responseLength: responseText.length, toolIterations: toolIteration },
+          'Gemini response extracted'
+        )
+        return responseText
       }
 
-      logger.debug({ responseLength: responseText.length }, 'Gemini raw response extracted')
-      return responseText
+      // Fell through the loop (max iterations) — try to extract any text from last response
+      logger.warn('Function calling loop exhausted without text response')
+      return getRandomFallback()
     })
 
     return { text: stripRokaPrefix(text), tone }

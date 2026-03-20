@@ -1,0 +1,12 @@
+const JIKAN_MIN_INTERVAL_MS = 350
+
+let lastJikanRequest = 0
+
+export async function jikanThrottle(): Promise<void> {
+  const now = Date.now()
+  const elapsed = now - lastJikanRequest
+  if (elapsed < JIKAN_MIN_INTERVAL_MS) {
+    await new Promise((resolve) => setTimeout(resolve, JIKAN_MIN_INTERVAL_MS - elapsed))
+  }
+  lastJikanRequest = Date.now()
+}

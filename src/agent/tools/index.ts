@@ -1,0 +1,108 @@
+import { Type } from '@google/genai'
+import type { FunctionDeclaration } from '@google/genai'
+import { rollDice, type RollDiceParams } from './rollDice.js'
+import { flipCoin } from './flipCoin.js'
+import { getCurrentTime, type GetCurrentTimeParams } from './getCurrentTime.js'
+import { searchAnime, type SearchAnimeParams } from './searchAnime.js'
+import { getAnimeSchedule, type GetAnimeScheduleParams } from './getAnimeSchedule.js'
+import { getWeather, type GetWeatherParams } from './getWeather.js'
+
+export { rollDice, flipCoin, getCurrentTime, searchAnime, getAnimeSchedule, getWeather }
+export type { RollDiceParams, GetCurrentTimeParams, SearchAnimeParams, GetAnimeScheduleParams, GetWeatherParams }
+
+export function getToolDeclarations(): FunctionDeclaration[] {
+  return [
+    {
+      name: 'roll_dice',
+      description: 'Roll dice. Use when someone wants to roll dice or play a dice game.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          count: { type: Type.INTEGER, description: 'Number of dice to roll (1-10)' },
+          sides: { type: Type.INTEGER, description: 'Number of sides per die (2-100)' }
+        }
+      }
+    },
+    {
+      name: 'flip_coin',
+      description: 'Flip a coin. Use when someone wants to flip a coin or make a random heads/tails choice.'
+    },
+    {
+      name: 'get_current_time',
+      description:
+        'Get the current time, date, and day of the week. Use when someone asks what time or day it is, optionally for a specific location.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          location: {
+            type: Type.STRING,
+            description: 'IANA timezone (e.g. Asia/Tokyo) or city name (e.g. London). Defaults to configured timezone.'
+          },
+          format: {
+            type: Type.STRING,
+            description: 'Time format: 12h or 24h. Defaults to 24h.',
+            enum: ['12h', '24h']
+          }
+        }
+      }
+    },
+    {
+      name: 'search_anime',
+      description:
+        'Search for anime by title or keyword. Use when someone asks about a specific anime, wants recommendations, or wants to look up anime information.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          query: { type: Type.STRING, description: 'Anime title or search keyword' }
+        },
+        required: ['query']
+      }
+    },
+    {
+      name: 'get_anime_schedule',
+      description:
+        'Get the anime airing schedule for a specific day of the week. Use when someone asks what anime is airing today or on a particular day.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          day: {
+            type: Type.STRING,
+            description: 'Day of the week (monday, tuesday, etc.). Defaults to today.',
+            enum: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+          }
+        }
+      }
+    },
+    {
+      name: 'get_weather',
+      description:
+        'Get the current weather for a city. Use when someone asks about the weather, temperature, or conditions in a location.',
+      parameters: {
+        type: Type.OBJECT,
+        properties: {
+          city: { type: Type.STRING, description: 'City name to get weather for' }
+        },
+        required: ['city']
+      }
+    }
+  ]
+}
+
+export async function executeToolCall(name: string, args: Record<string, unknown>): Promise<Record<string, unknown>> {
+  switch (name) {
+    case 'roll_dice':
+      return rollDice(args as RollDiceParams) as unknown as Record<string, unknown>
+    case 'flip_coin':
+      return flipCoin() as unknown as Record<string, unknown>
+    case 'get_current_time':
+      return getCurrentTime(args as GetCurrentTimeParams) as unknown as Record<string, unknown>
+    case 'search_anime':
+      return (await searchAnime(args as unknown as SearchAnimeParams)) as unknown as Record<string, unknown>
+    case 'get_anime_schedule':
+      return (await getAnimeSchedule(args as unknown as GetAnimeScheduleParams)) as unknown as Record<string, unknown>
+    case 'get_weather':
+      return (await getWeather(args as unknown as GetWeatherParams)) as unknown as Record<string, unknown>
+    default:
+      return { error: `Unknown tool: ${name}` }
+  }
+}
