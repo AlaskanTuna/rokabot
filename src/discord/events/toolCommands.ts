@@ -1,6 +1,6 @@
 import type { ChatInputCommandInteraction } from 'discord.js'
-import { ContainerBuilder, TextDisplayBuilder } from '@discordjs/builders'
-import { MessageFlags } from 'discord.js'
+import { ActionRowBuilder, ButtonBuilder, ContainerBuilder, TextDisplayBuilder } from '@discordjs/builders'
+import { ButtonStyle, ComponentType, MessageFlags } from 'discord.js'
 import { logger } from '../../utils/logger.js'
 import { RateLimiter } from '../../utils/rateLimiter.js'
 import { getRandomDecline } from '../responses.js'
@@ -150,9 +150,9 @@ async function handleSchedule(interaction: ChatInputCommandInteraction) {
     const score = entry.score ? `\u2B50 ${entry.score}` : 'No score yet'
     const broadcastLine =
       entry.broadcastDay && entry.broadcastTime
-        ? `\uD83D\uDCC5 ${capitalize(entry.broadcastDay)}s at ${entry.broadcastTime} JST`
+        ? `\uD83D\uDCC5 ${capitalize(entry.broadcastDay)} at ${entry.broadcastTime} JST`
         : '\uD83D\uDCC5 Broadcast TBA'
-    const tzLine = entry.broadcastTimezones ? `  \uD83D\uDD50 ${formatTimezoneList(entry.broadcastTimezones)}` : ''
+    const tzLine = entry.broadcastTimezones ? `\uD83D\uDD50 ${formatTimezoneList(entry.broadcastTimezones)}` : ''
     const seasonLine = entry.season && entry.year ? `\uD83C\uDF38 ${capitalize(entry.season)} ${entry.year}` : ''
 
     const lines = [
@@ -169,23 +169,131 @@ async function handleSchedule(interaction: ChatInputCommandInteraction) {
     return buildToolMessage(lines.join('\n'), CURIOUS_COLOR)
   }
 
-  // List results (day/week/season)
+  // List results (day/week/season) with pagination
   const sortLabel = sortBy ? `sorted by ${sortBy}` : 'sorted by score'
   const header = `\uD83D\uDCC5 **${result.label}** (${sortLabel})`
+  const pageSize = 5
+  const totalPages = Math.ceil(result.entries.length / pageSize)
 
-  const lines = result.entries.map((entry, i) => {
-    const score = entry.score ? `\u2B50 ${entry.score}` : ''
-    const broadcastPart =
-      entry.broadcastDay && entry.broadcastTime
-        ? `${capitalize(entry.broadcastDay)}s at ${entry.broadcastTime} JST`
-        : 'Broadcast TBA'
-    const tzShort = entry.broadcastTimezones ? ` (${formatTimezoneShort(entry.broadcastTimezones)})` : ''
-    return `${i + 1}. **${entry.title}** ${score}\n   ${broadcastPart}${tzShort}`
+  function buildPage(page: number) {
+    const start = page * pageSize
+    const end = Math.min(start + pageSize, result.entries.length)
+    const pageEntries = result.entries.slice(start, end)
+
+    const lines = pageEntries.map((entry, i) => {
+      const score = entry.score ? `\u2B50 ${entry.score}` : ''
+      const broadcastPart =
+        entry.broadcastDay && entry.broadcastTime
+          ? `${capitalize(entry.broadcastDay)} at ${entry.broadcastTime} JST`
+          : 'Broadcast TBA'
+      const tzShort = entry.broadcastTimezones ? ` (${formatTimezoneShort(entry.broadcastTimezones)})` : ''
+      return `${start + i + 1}. **${entry.title}** ${score}\n   ${broadcastPart}${tzShort}`
+    })
+
+    const pageInfo = totalPages > 1 ? ` \u2022 Page ${page + 1}/${totalPages}` : ''
+    const footer = `\nShowing ${start + 1}-${end} of ${result.total} results${pageInfo}`
+    return `${flavor}\n\n${header}\n\n${lines.join('\n')}\n${footer}`
+  }
+
+  // Single page — no buttons needed
+  if (totalPages <= 1) {
+    return buildToolMessage(buildPage(0), CURIOUS_COLOR)
+  }
+
+  // Multi-page — add pagination buttons
+  let currentPage = 0
+  const initialText = buildPage(currentPage)
+  const container = new ContainerBuilder()
+    .setAccentColor(CURIOUS_COLOR)
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(initialText))
+    .addActionRowComponents(
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId('schedule_prev')
+          .setLabel('\u25C0 Prev')
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(true),
+        new ButtonBuilder().setCustomId('schedule_next').setLabel('Next \u25B6').setStyle(ButtonStyle.Primary)
+      )
+    )
+
+  const reply = await interaction.editReply({
+    components: [container],
+    flags: MessageFlags.IsComponentsV2 as typeof MessageFlags.IsComponentsV2
   })
 
-  const footer = `\nShowing ${result.entries.length} of ${result.total} results`
-  const text = `${flavor}\n\n${header}\n\n${lines.join('\n')}\n${footer}`
-  return buildToolMessage(text, CURIOUS_COLOR)
+  // Collector for button interactions (60s timeout)
+  const collector = reply.createMessageComponentCollector({
+    componentType: ComponentType.Button,
+    time: 60_000
+  })
+
+  collector.on('collect', async (btnInteraction) => {
+    if (btnInteraction.user.id !== interaction.user.id) {
+      await btnInteraction.reply({ content: "Those buttons aren't for you~", flags: MessageFlags.Ephemeral })
+      return
+    }
+
+    if (btnInteraction.customId === 'schedule_next' && currentPage < totalPages - 1) {
+      currentPage++
+    } else if (btnInteraction.customId === 'schedule_prev' && currentPage > 0) {
+      currentPage--
+    }
+
+    const updatedContainer = new ContainerBuilder()
+      .setAccentColor(CURIOUS_COLOR)
+      .addTextDisplayComponents(new TextDisplayBuilder().setContent(buildPage(currentPage)))
+      .addActionRowComponents(
+        new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId('schedule_prev')
+            .setLabel('\u25C0 Prev')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(currentPage === 0),
+          new ButtonBuilder()
+            .setCustomId('schedule_next')
+            .setLabel('Next \u25B6')
+            .setStyle(ButtonStyle.Primary)
+            .setDisabled(currentPage >= totalPages - 1)
+        )
+      )
+
+    await btnInteraction.update({
+      components: [updatedContainer],
+      flags: MessageFlags.IsComponentsV2 as typeof MessageFlags.IsComponentsV2
+    })
+  })
+
+  collector.on('end', async () => {
+    // Disable buttons after timeout
+    const disabledContainer = new ContainerBuilder()
+      .setAccentColor(CURIOUS_COLOR)
+      .addTextDisplayComponents(new TextDisplayBuilder().setContent(buildPage(currentPage)))
+      .addActionRowComponents(
+        new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId('schedule_prev')
+            .setLabel('\u25C0 Prev')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(true),
+          new ButtonBuilder()
+            .setCustomId('schedule_next')
+            .setLabel('Next \u25B6')
+            .setStyle(ButtonStyle.Primary)
+            .setDisabled(true)
+        )
+      )
+
+    await interaction
+      .editReply({
+        components: [disabledContainer],
+        flags: MessageFlags.IsComponentsV2 as typeof MessageFlags.IsComponentsV2
+      })
+      .catch(() => {})
+  })
+
+  // Return value not used since we already edited the reply
+  return undefined as unknown as ReturnType<typeof buildToolMessage>
 }
 
 function capitalize(str: string): string {
@@ -276,7 +384,8 @@ export function createToolCommandHandler(rateLimiter: RateLimiter) {
         case 'schedule': {
           await interaction.deferReply()
           const payload = await handleSchedule(interaction)
-          await interaction.editReply(payload)
+          if (payload) await interaction.editReply(payload)
+          // If payload is undefined, handleSchedule already edited the reply (paginated)
           break
         }
         case 'weather': {

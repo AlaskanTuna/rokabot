@@ -2,7 +2,7 @@ import { config } from '../../config.js'
 import { logger } from '../../utils/logger.js'
 import { jikanThrottle } from './jikanThrottle.js'
 
-// ── Interfaces ──────────────────────────────────────────────────────────────────
+// Interfaces
 
 export interface GetAnimeScheduleParams {
   scope: 'day' | 'week' | 'season'
@@ -36,7 +36,7 @@ export interface GetAnimeScheduleResult {
   total: number
 }
 
-// ── Jikan response types ────────────────────────────────────────────────────────
+// Jikan response types
 
 interface JikanAnimeEntry {
   title?: string
@@ -67,7 +67,7 @@ interface JikanResponse {
   }
 }
 
-// ── Constants ───────────────────────────────────────────────────────────────────
+// Constants
 
 const VALID_DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const
 
@@ -79,7 +79,7 @@ const BROADCAST_TIMEZONES: Record<string, string> = {
   SGT: 'Asia/Singapore'
 }
 
-// ── Helpers ─────────────────────────────────────────────────────────────────────
+// Helpers
 
 function getTodayName(): string {
   const tz = config.timezone ?? 'UTC'
@@ -181,7 +181,7 @@ function clampLimit(limit: number | undefined): number {
   return Math.max(1, Math.min(25, limit))
 }
 
-// ── Fetch helpers ───────────────────────────────────────────────────────────────
+// Fetch helpers
 
 async function fetchJikan(url: string): Promise<JikanResponse | null> {
   try {
@@ -200,7 +200,7 @@ async function fetchJikan(url: string): Promise<JikanResponse | null> {
   }
 }
 
-// ── Scope handlers ──────────────────────────────────────────────────────────────
+// Scope handlers
 
 async function handleAnimeLookup(anime: string): Promise<GetAnimeScheduleResult> {
   const url = `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(anime)}&limit=1&sfw=true`
@@ -264,7 +264,7 @@ async function handleSeason(sortBy: string, limit: number): Promise<GetAnimeSche
   return { scope: 'season', label, entries, total }
 }
 
-// ── Main export ─────────────────────────────────────────────────────────────────
+// Main export
 
 export async function getAnimeSchedule(params: GetAnimeScheduleParams): Promise<GetAnimeScheduleResult> {
   const { scope, day, sort_by = 'score', anime } = params

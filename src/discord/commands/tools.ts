@@ -41,9 +41,15 @@ export const scheduleCommand = new SlashCommandBuilder()
   .setDescription('Check the anime airing schedule!')
   .addStringOption((opt) =>
     opt
+      .setName('anime')
+      .setDescription('Look up a specific anime broadcast schedule (skips scope/sort/limit)')
+      .setRequired(false)
+  )
+  .addStringOption((opt) =>
+    opt
       .setName('scope')
-      .setDescription('Time range to check')
-      .setRequired(true)
+      .setDescription('Time range to check (default: Today)')
+      .setRequired(false)
       .addChoices(
         { name: 'Today', value: 'day' },
         { name: 'This Week', value: 'week' },
@@ -84,12 +90,6 @@ export const scheduleCommand = new SlashCommandBuilder()
       .setRequired(false)
       .setMinValue(1)
       .setMaxValue(25)
-  )
-  .addStringOption((opt) =>
-    opt
-      .setName('anime')
-      .setDescription('Search schedule for a specific anime (overrides other options)')
-      .setRequired(false)
   )
 
 export const weatherCommand = new SlashCommandBuilder()
