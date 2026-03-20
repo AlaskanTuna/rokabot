@@ -30,7 +30,7 @@ export function getToolDeclarations(): FunctionDeclaration[] {
     {
       name: 'get_current_time',
       description:
-        'Get the current time, date, and day of the week. Use when someone asks what time or day it is, optionally for a specific location.',
+        'Get the current time, date, and day of the week for a location. IMPORTANT: Always report the exact time returned by this tool — never estimate or guess the time yourself.',
       parameters: {
         type: Type.OBJECT,
         properties: {

@@ -296,10 +296,10 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
             const toolResult = await executeToolCall(name ?? '', (args ?? {}) as Record<string, unknown>)
             logger.debug({ tool: name, resultKeys: Object.keys(toolResult) }, 'Tool executed successfully')
 
-            // Add the model's function call and our function response to contents
+            // Preserve the model's full response (including thought_signature) — required by Gemini
             loopContents.push({
               role: 'model' as const,
-              parts: [{ functionCall: { name: name ?? '', args: args ?? {} } }]
+              parts
             })
             loopContents.push({
               role: 'user' as const,
@@ -309,10 +309,10 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
             continue // Loop again to get the model's text response
           } catch (toolError) {
             logger.error({ tool: name, error: toolError }, 'Tool execution failed')
-            // Send error back to model
+            // Preserve the model's full response (including thought_signature) — required by Gemini
             loopContents.push({
               role: 'model' as const,
-              parts: [{ functionCall: { name: name ?? '', args: args ?? {} } }]
+              parts
             })
             loopContents.push({
               role: 'user' as const,
