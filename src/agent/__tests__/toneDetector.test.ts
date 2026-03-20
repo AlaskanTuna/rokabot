@@ -33,14 +33,48 @@ describe('detectTone', () => {
     })
   })
 
+  describe('tender detection', () => {
+    it('detects tender tone from vulnerability keywords', () => {
+      const messages = [makeMessage('I miss you, goodnight')]
+      expect(detectTone(messages)).toBe('tender')
+    })
+
+    it('detects tender tone from gratitude and connection', () => {
+      const messages = [makeMessage('thank you for always being there')]
+      expect(detectTone(messages)).toBe('tender')
+    })
+
+    it('detects tender tone from worry and care', () => {
+      const messages = [makeMessage('stay safe out there, I promise I will')]
+      expect(detectTone(messages)).toBe('tender')
+    })
+  })
+
+  describe('annoyed detection', () => {
+    it('detects annoyed tone from defiance keywords', () => {
+      const messages = [makeMessage("no I won't do it")]
+      expect(detectTone(messages)).toBe('annoyed')
+    })
+
+    it('detects annoyed tone from recklessness keywords', () => {
+      const messages = [makeMessage("I didn't eat and stayed up all night")]
+      expect(detectTone(messages)).toBe('annoyed')
+    })
+
+    it('detects annoyed tone from teasing-her keywords', () => {
+      const messages = [makeMessage('you are so old, granny')]
+      expect(detectTone(messages)).toBe('annoyed')
+    })
+
+    it('detects annoyed tone from arguing keywords', () => {
+      const messages = [makeMessage("whatever, I don't care")]
+      expect(detectTone(messages)).toBe('annoyed')
+    })
+  })
+
   describe('sincere detection', () => {
     it('detects sincere tone from emotional keywords', () => {
       const messages = [makeMessage('I feel so sad and lonely today')]
-      expect(detectTone(messages)).toBe('sincere')
-    })
-
-    it('detects sincere tone from gratitude keywords', () => {
-      const messages = [makeMessage('thank you, I am grateful')]
       expect(detectTone(messages)).toBe('sincere')
     })
 
@@ -67,9 +101,31 @@ describe('detectTone', () => {
     })
   })
 
+  describe('curious detection', () => {
+    it('detects curious tone from question words', () => {
+      const messages = [makeMessage('what is that and how does it work?')]
+      expect(detectTone(messages)).toBe('curious')
+    })
+
+    it('detects curious tone from learning keywords', () => {
+      const messages = [makeMessage('that is so interesting, I wonder about it')]
+      expect(detectTone(messages)).toBe('curious')
+    })
+
+    it('detects curious tone from analysis keywords', () => {
+      const messages = [makeMessage('what if we think about this theory')]
+      expect(detectTone(messages)).toBe('curious')
+    })
+
+    it('does not trigger curious from a single question word', () => {
+      const messages = [makeMessage('what')]
+      expect(detectTone(messages)).toBe('playful')
+    })
+  })
+
   describe('default fallback', () => {
     it('returns playful when no patterns match', () => {
-      const messages = [makeMessage('hey what do you think about video games?')]
+      const messages = [makeMessage('hey lets play some video games')]
       expect(detectTone(messages)).toBe('playful')
     })
 
@@ -80,6 +136,29 @@ describe('detectTone', () => {
     it('returns playful when only one keyword matches (needs 2)', () => {
       const messages = [makeMessage('I feel sad')]
       expect(detectTone(messages)).toBe('playful')
+    })
+  })
+
+  describe('detection priority order', () => {
+    it('flustered beats tender when both match', () => {
+      // "love" + "crush" = flustered; "always" + "together" = tender
+      // flustered is checked first
+      const messages = [makeMessage('I love you, I always want to be together, I have a crush')]
+      expect(detectTone(messages)).toBe('flustered')
+    })
+
+    it('tender beats annoyed when both match', () => {
+      // "miss" + "goodnight" = tender; "no" + "whatever" = annoyed
+      // tender is checked before annoyed
+      const messages = [makeMessage('no whatever, I miss you, goodnight')]
+      expect(detectTone(messages)).toBe('tender')
+    })
+
+    it('annoyed beats sincere when both match', () => {
+      // "no" + "won't" = annoyed; "sad" + "lonely" = sincere
+      // annoyed is checked before sincere
+      const messages = [makeMessage("no I won't, I feel sad and lonely")]
+      expect(detectTone(messages)).toBe('annoyed')
     })
   })
 

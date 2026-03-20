@@ -48,7 +48,7 @@ describe('assembleSystemPrompt', () => {
   })
 
   it('uses different Layer 2 for each tone', () => {
-    const tones: ToneKey[] = ['playful', 'sincere', 'domestic', 'flustered']
+    const tones: ToneKey[] = ['playful', 'sincere', 'domestic', 'flustered', 'curious', 'annoyed', 'tender']
     const results = tones.map((tone) => assembleSystemPrompt({ ...baseInput, tone }))
 
     // Each result should contain the corresponding tone prompt
@@ -62,6 +62,24 @@ describe('assembleSystemPrompt', () => {
         expect(results[i]).not.toBe(results[j])
       }
     }
+  })
+
+  it('contains curious tone prompt when tone is curious', () => {
+    const result = assembleSystemPrompt({ ...baseInput, tone: 'curious' })
+    expect(result).toContain('Curious')
+    expect(result).toContain(TONE_PROMPTS.curious)
+  })
+
+  it('contains annoyed tone prompt when tone is annoyed', () => {
+    const result = assembleSystemPrompt({ ...baseInput, tone: 'annoyed' })
+    expect(result).toContain('Annoyed')
+    expect(result).toContain(TONE_PROMPTS.annoyed)
+  })
+
+  it('contains tender tone prompt when tone is tender', () => {
+    const result = assembleSystemPrompt({ ...baseInput, tone: 'tender' })
+    expect(result).toContain('Tender')
+    expect(result).toContain(TONE_PROMPTS.tender)
   })
 
   it('handles multiple participants', () => {
