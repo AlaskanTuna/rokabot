@@ -126,11 +126,11 @@ Secrets live in `.env`, tunables live in `config.yml`.
 ## High-Level Architecture
 
 ```mermaid
-graph TB
+graph LR
     User((User))
 
     subgraph DGL["Discord Gateway Layer"]
-        direction TB
+        direction LR
         Triggers["/chat · @mention · reply"]
         RL["Rate Limiter\n(Token Bucket RPM + Daily RPD)"]
         CG["Concurrency Guard\n(1 active req per channel)"]
@@ -138,7 +138,7 @@ graph TB
     end
 
     subgraph SM["Session Manager (In-Memory)"]
-        direction TB
+        direction LR
         Map["channelId → ChannelSession"]
         FIFO["10-Message FIFO Window"]
         TTL["5-min Idle TTL"]
@@ -147,7 +147,7 @@ graph TB
     end
 
     subgraph RA["Roka Agent"]
-        direction TB
+        direction LR
         TD["Tone Detector\n(Rule-based keyword scan)"]
         PA["Prompt Assembler"]
         subgraph PL["4-Layer Prompt System (~1000-1600 tokens)"]
@@ -161,7 +161,7 @@ graph TB
     end
 
     subgraph RP["Response Pipeline"]
-        direction TB
+        direction LR
         MB["Message Builder\n(Discord Components V2)"]
         TS["Tone Styles + Expressions"]
         SR["Response Splitter\n(≤2000 chars)"]
@@ -183,15 +183,15 @@ graph TB
 How user (client) prompts go through the system (backend) and transform plain messages into rich, character-personalized replies:
 
 ```mermaid
-flowchart TD
-    Start([User sends /chat, @mention, or reply])
+flowchart LR
+    Start([User sends /chat,\n@mention, or reply])
     Start --> Extract["Extract message, images,\nchannelId, displayName"]
     Extract --> RateCheck{Rate limit\navailable?}
-    RateCheck -->|No| Decline([Send decline response])
+    RateCheck -->|No| Decline([Send decline\nresponse])
     RateCheck -->|Yes| BusyCheck{Channel\nbusy?}
-    BusyCheck -->|Yes| Busy([Send busy response])
+    BusyCheck -->|Yes| Busy([Send busy\nresponse])
     BusyCheck -->|No| EmptyCheck{Has content\nor images?}
-    EmptyCheck -->|No| Empty([Send empty-mention response])
+    EmptyCheck -->|No| Empty([Send empty-mention\nresponse])
     EmptyCheck -->|Yes| Defer["Defer reply / send typing\nMark channel busy"]
 
     Defer --> Session["Get or create session\nReset 5-min idle timer"]
@@ -217,7 +217,7 @@ flowchart TD
 The tone detector scans the last 3 messages for keyword matches (zero LLM cost):
 
 ```mermaid
-flowchart TD
+flowchart LR
     Input(["Last 3 messages\nfrom session window"]) --> Join["Concatenate all\nmessage content"]
     Join --> F{"🫣 flustered?\n≥2 of 19 patterns\n(love, crush, kiss, date, ❤️ ...)"}
     F -->|Match| RF([flustered])
