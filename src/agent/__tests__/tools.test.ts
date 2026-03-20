@@ -127,6 +127,7 @@ describe('searchAnime', () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
+        pagination: { items: { total: 1 } },
         data: [
           {
             title: 'Naruto',
@@ -135,6 +136,7 @@ describe('searchAnime', () => {
             episodes: 220,
             status: 'Finished Airing',
             score: 8.0,
+            members: 500000,
             synopsis: 'A ninja story...',
             url: 'https://myanimelist.net/anime/20'
           }
@@ -144,6 +146,7 @@ describe('searchAnime', () => {
 
     const result = await searchAnime({ query: 'Naruto' })
     expect(result.query).toBe('Naruto')
+    expect(result.total).toBe(1)
     expect(result.results).toHaveLength(1)
     expect(result.results[0]).toEqual({
       title: 'Naruto',
@@ -152,6 +155,7 @@ describe('searchAnime', () => {
       episodes: 220,
       status: 'Finished Airing',
       score: 8.0,
+      members: 500000,
       synopsis: 'A ninja story...',
       url: 'https://myanimelist.net/anime/20'
     })
@@ -160,12 +164,12 @@ describe('searchAnime', () => {
   it('returns empty results for empty data array', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ data: [] })
+      json: async () => ({ pagination: { items: { total: 0 } }, data: [] })
     })
 
     const result = await searchAnime({ query: 'xyznonexistent' })
     expect(result.results).toHaveLength(0)
-    expect(result.query).toBe('xyznonexistent')
+    expect(result.total).toBe(0)
   })
 
   it('handles API errors gracefully', async () => {
@@ -173,7 +177,21 @@ describe('searchAnime', () => {
 
     const result = await searchAnime({ query: 'Naruto' })
     expect(result.results).toHaveLength(0)
-    expect(result.query).toBe('Naruto')
+    expect(result.total).toBe(0)
+  })
+
+  it('passes sort_by and type params to Jikan', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ pagination: { items: { total: 0 } }, data: [] })
+    })
+
+    await searchAnime({ query: 'test', sort_by: 'score', type: 'tv', status: 'airing' })
+    const calledUrl = mockFetch.mock.calls[0][0] as string
+    expect(calledUrl).toContain('order_by=score')
+    expect(calledUrl).toContain('sort=desc')
+    expect(calledUrl).toContain('type=tv')
+    expect(calledUrl).toContain('status=airing')
   })
 })
 

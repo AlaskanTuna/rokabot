@@ -35,6 +35,52 @@ export const animeCommand = new SlashCommandBuilder()
   .setName('anime')
   .setDescription('Search for anime!')
   .addStringOption((opt) => opt.setName('query').setDescription('Anime title to search for').setRequired(true))
+  .addStringOption((opt) =>
+    opt
+      .setName('sort_by')
+      .setDescription('Sort results by (default: relevance)')
+      .setRequired(false)
+      .addChoices(
+        { name: 'Score', value: 'score' },
+        { name: 'Popularity', value: 'popularity' },
+        { name: 'Members', value: 'members' },
+        { name: 'Title', value: 'title' },
+        { name: 'Start Date', value: 'start_date' }
+      )
+  )
+  .addStringOption((opt) =>
+    opt
+      .setName('type')
+      .setDescription('Filter by type')
+      .setRequired(false)
+      .addChoices(
+        { name: 'TV', value: 'tv' },
+        { name: 'Movie', value: 'movie' },
+        { name: 'OVA', value: 'ova' },
+        { name: 'Special', value: 'special' },
+        { name: 'ONA', value: 'ona' },
+        { name: 'Music', value: 'music' }
+      )
+  )
+  .addStringOption((opt) =>
+    opt
+      .setName('status')
+      .setDescription('Filter by status')
+      .setRequired(false)
+      .addChoices(
+        { name: 'Currently Airing', value: 'airing' },
+        { name: 'Finished', value: 'complete' },
+        { name: 'Upcoming', value: 'upcoming' }
+      )
+  )
+  .addIntegerOption((opt) =>
+    opt
+      .setName('limit')
+      .setDescription('Number of results (default: 5)')
+      .setRequired(false)
+      .setMinValue(1)
+      .setMaxValue(25)
+  )
 
 export const scheduleCommand = new SlashCommandBuilder()
   .setName('schedule')

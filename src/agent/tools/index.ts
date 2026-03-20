@@ -53,7 +53,23 @@ export function getToolDeclarations(): FunctionDeclaration[] {
       parameters: {
         type: Type.OBJECT,
         properties: {
-          query: { type: Type.STRING, description: 'Anime title or search keyword' }
+          query: { type: Type.STRING, description: 'Anime title or search keyword' },
+          limit: { type: Type.INTEGER, description: 'Number of results to return (1-25). Defaults to 5.' },
+          sort_by: {
+            type: Type.STRING,
+            description: 'Sort results by. Defaults to relevance.',
+            enum: ['score', 'popularity', 'members', 'title', 'start_date']
+          },
+          type: {
+            type: Type.STRING,
+            description: 'Filter by anime type.',
+            enum: ['tv', 'movie', 'ova', 'special', 'ona', 'music']
+          },
+          status: {
+            type: Type.STRING,
+            description: 'Filter by airing status.',
+            enum: ['airing', 'complete', 'upcoming']
+          }
         },
         required: ['query']
       }
