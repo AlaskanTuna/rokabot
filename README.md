@@ -164,7 +164,7 @@ flowchart TD
 The tone detector evaluates the last 3 user messages against priority-ordered regular expressions, requiring at least 2 pattern matches to trigger a specific tone (zero LLM cost). If no thresholds are met during the cascading fallback, it defaults to the playful tone.
 
 ```mermaid
-flowchart TD
+flowchart LR
     Input(["Last 3 user messages"]) --> Scan["Regex Keyword Scan\n(Requires ≥2 unique matches)"]
 
     Scan --> CheckFlustered{1. Flustered matches?}
