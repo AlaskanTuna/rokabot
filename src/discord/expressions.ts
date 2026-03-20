@@ -7,13 +7,14 @@ import { logger } from '../utils/logger.js'
  * A random expression is selected from the pool for each message.
  */
 const TONE_EXPRESSIONS: Record<ToneKey, string[]> = {
-  playful: ['smile', 'cheerful', 'delighted', 'blank_stare', 'base'],
+  playful: ['smile', 'cheerful', 'delighted'],
   sincere: ['sad', 'downcast', 'somber', 'sorrowful', 'pained', 'melancholy'],
   domestic: ['gentle_smile', 'content', 'serene', 'relieved'],
   flustered: ['flustered', 'nervous', 'awkward', 'uncertain'],
-  curious: ['attentive', 'thinking', 'explaining', 'surprised', 'composed'],
+  curious: ['thinking', 'surprised', 'blank_stare', 'uncertain'],
   annoyed: ['exasperated', 'dissatisfied', 'dissatisfied_2', 'dissatisfied_3', 'frustrated', 'resigned'],
-  tender: ['worried', 'troubled', 'anxious', 'gentle_smile', 'melancholy']
+  tender: ['worried', 'troubled', 'anxious', 'gentle_smile', 'melancholy'],
+  confident: ['composed', 'base', 'explaining', 'attentive']
 }
 
 /**

@@ -19,7 +19,8 @@ const TONE_STYLES: Record<ToneKey, ToneStyle> = {
   flustered: { color: 0xffaf8c, imageUrl: 'https://placehold.co/80x80/FFAF8C/white?text=%2F%2F' },
   curious: { color: 0x5b9bd5, imageUrl: 'https://placehold.co/80x80/5B9BD5/white?text=%3F' },
   annoyed: { color: 0xe57373, imageUrl: 'https://placehold.co/80x80/E57373/white?text=%E2%80%BC' },
-  tender: { color: 0xce93d8, imageUrl: 'https://placehold.co/80x80/CE93D8/white?text=%E2%99%A5' }
+  tender: { color: 0xce93d8, imageUrl: 'https://placehold.co/80x80/CE93D8/white?text=%E2%99%A5' },
+  confident: { color: 0x4caf50, imageUrl: 'https://placehold.co/80x80/4CAF50/white?text=%E2%9C%93' }
 }
 
 export function getToneStyle(tone: ToneKey): ToneStyle {

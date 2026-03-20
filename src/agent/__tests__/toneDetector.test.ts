@@ -123,6 +123,28 @@ describe('detectTone', () => {
     })
   })
 
+  describe('confident detection', () => {
+    it('detects confident tone from advice-seeking keywords', () => {
+      const messages = [makeMessage('can you help me with some advice on this?')]
+      expect(detectTone(messages)).toBe('confident')
+    })
+
+    it('detects confident tone from teaching keywords', () => {
+      const messages = [makeMessage('teach me how to do this, show me the way')]
+      expect(detectTone(messages)).toBe('confident')
+    })
+
+    it('detects confident tone from recommendation keywords', () => {
+      const messages = [makeMessage('what should I do? can you recommend something?')]
+      expect(detectTone(messages)).toBe('confident')
+    })
+
+    it('detects confident tone from trust keywords', () => {
+      const messages = [makeMessage("don't worry, I trust me with this")]
+      expect(detectTone(messages)).toBe('confident')
+    })
+  })
+
   describe('default fallback', () => {
     it('returns playful when no patterns match', () => {
       const messages = [makeMessage('hey lets play some video games')]
@@ -159,6 +181,12 @@ describe('detectTone', () => {
       // annoyed is checked before sincere
       const messages = [makeMessage("no I won't, I feel sad and lonely")]
       expect(detectTone(messages)).toBe('annoyed')
+    })
+
+    it('confident beats playful when both match', () => {
+      // "advice" + "recommend" = confident; no specific playful keywords (playful is fallback)
+      const messages = [makeMessage('I need some advice, can you recommend something fun?')]
+      expect(detectTone(messages)).toBe('confident')
     })
   })
 

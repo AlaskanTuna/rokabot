@@ -13,7 +13,8 @@ import type { WindowMessage } from '../session/types.js'
  * 4. sincere — heavy emotional
  * 5. domestic — food/daily life
  * 6. curious — questions/learning
- * 7. playful — default fallback
+ * 7. confident — help/advice/trust
+ * 8. playful — default fallback
  */
 
 interface ToneRule {
@@ -152,6 +153,25 @@ const TONE_PATTERNS: ToneRule[] = [
       /\bthink about\b/i,
       /\bwhat if\b/i,
       /\btheory\b/i
+    ]
+  },
+  {
+    tone: 'confident',
+    minMatches: 2,
+    patterns: [
+      /\bleave it to me\b/i,
+      /\bdon't worry\b/i,
+      /\bi've got this\b/i,
+      /\btrust me\b/i,
+      /\badvice\b/i,
+      /\bhelp me with\b/i,
+      /\bwhat should I\b/i,
+      /\brecommend\b/i,
+      /\bhow do I\b/i,
+      /\bteach me\b/i,
+      /\bshow me\b/i,
+      /\bneed your help\b/i,
+      /\bcan you help\b/i
     ]
   }
 ]
