@@ -1,4 +1,4 @@
-import type { ChatInputCommandInteraction, Interaction } from 'discord.js'
+import type { Interaction } from 'discord.js'
 import { DiscordAPIError } from 'discord.js'
 import { logger } from '../../utils/logger.js'
 import { RateLimiter } from '../../utils/rateLimiter.js'
