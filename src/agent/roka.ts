@@ -28,13 +28,12 @@ export interface GenerateResult {
 const MAX_IMAGE_SIZE_BYTES = 4 * 1024 * 1024
 const APP_NAME = 'rokabot'
 
-// Extends InMemorySessionService to cap event history per getSession call.
+// Extends InMemorySessionService to cap event history per getSession call
 class WindowedSessionService extends InMemorySessionService {
   constructor(private maxEvents: number) {
     super()
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   override async getSession(request: any): Promise<any> {
     return super.getSession({
       ...request,
@@ -167,7 +166,7 @@ export async function destroyAllSessions(): Promise<void> {
   logger.info('All ADK sessions destroyed')
 }
 
-// Helpers.
+// Helpers
 
 async function downloadImage(url: string): Promise<{ data: string; mimeType: string } | null> {
   try {
@@ -221,8 +220,7 @@ function getRandomFallback(): string {
   return fallbacks[Math.floor(Math.random() * fallbacks.length)]
 }
 
-// Convert ADK session events to WindowMessages for tone detection.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// Convert ADK session events to WindowMessages for tone detection
 function eventsToWindowMessages(events: any[]): WindowMessage[] {
   return events
     .filter((e) => e.content?.parts?.some((p: Part) => p.text && !p.thought))
@@ -237,7 +235,7 @@ function eventsToWindowMessages(events: any[]): WindowMessage[] {
     }))
 }
 
-// Main entry point.
+// Main entry point
 
 export async function generateResponse(options: GenerateOptions): Promise<GenerateResult> {
   const { channelId, userMessage, displayName, imageAttachments } = options
@@ -245,11 +243,11 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
   const session = await ensureSession(channelId)
   resetIdleTimer(channelId)
 
-  // Track participants across the session.
+  // Track participants across the session
   const storedParticipants = (session.state?.participants as string[]) ?? []
   const participants = [...new Set([...storedParticipants, displayName])]
 
-  // Detect tone from recent session history.
+  // Detect tone from recent session history
   const fakeMessages = eventsToWindowMessages(session.events ?? [])
   const tone = detectTone(fakeMessages)
   const hour = getLocalHour()
@@ -258,7 +256,7 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
 
   logger.debug({ tone, participantCount: participants.length, hour }, 'Prompt assembled')
 
-  // Build user message content with optional images.
+  // Build user message content with optional images
   const imageParts: Part[] = []
   if (imageAttachments?.length) {
     const downloads = await Promise.all(imageAttachments.map((img) => downloadImage(img.url)))
@@ -310,5 +308,46 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
   } catch (error) {
     logger.error({ error }, 'ADK request failed')
     throw error
+  }
+}
+
+// Standalone web search via the search sub-agent
+
+const searchSessionService = new InMemorySessionService()
+const searchRunner = new Runner({ appName: 'rokabot-search', agent: searchAgent, sessionService: searchSessionService })
+
+export async function searchWeb(query: string): Promise<string> {
+  const sessionId = `search-${Date.now()}`
+
+  await searchSessionService.createSession({
+    appName: 'rokabot-search',
+    userId: 'search',
+    sessionId
+  })
+
+  try {
+    let resultText = ''
+
+    for await (const event of searchRunner.runAsync({
+      userId: 'search',
+      sessionId,
+      newMessage: { role: 'user', parts: [{ text: query }] },
+      runConfig: { maxLlmCalls: 2 }
+    })) {
+      if (isFinalResponse(event) && event.content?.parts) {
+        resultText = event.content.parts
+          .filter((p: Part) => p.text && !p.thought)
+          .map((p: Part) => p.text)
+          .join('')
+          .trim()
+      }
+    }
+
+    return resultText || 'No results found.'
+  } catch (error) {
+    logger.error({ error }, 'Web search failed')
+    throw error
+  } finally {
+    await searchSessionService.deleteSession({ appName: 'rokabot-search', userId: 'search', sessionId }).catch(() => {})
   }
 }

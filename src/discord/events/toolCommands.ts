@@ -8,6 +8,7 @@ import { getCurrentTime } from '../../agent/tools/getCurrentTime.js'
 import { getWeather } from '../../agent/tools/getWeather.js'
 import { searchAnime, type SearchAnimeParams } from '../../agent/tools/searchAnime.js'
 import { getAnimeSchedule } from '../../agent/tools/getAnimeSchedule.js'
+import { searchWeb } from '../../agent/roka.js'
 
 // COLOR CONSTANTS
 const PLAYFUL_COLOR = 0xffb3d9
@@ -34,6 +35,11 @@ const FLAVOR = {
     'Hmm, let me check the weather for you~',
     'I wonder what the weather is like there~',
     "Let's see~ checking the forecast!"
+  ],
+  search: [
+    'Let me look that up for you~',
+    'Hmm, good question! Let me check~',
+    "One moment~ I'll search for that!"
   ]
 }
 
@@ -423,7 +429,7 @@ async function handleWeather(interaction: ChatInputCommandInteraction) {
 }
 
 // Handler
-const TOOL_COMMAND_NAMES = new Set(['roll_dice', 'flip_coin', 'time', 'anime', 'schedule', 'weather'])
+const TOOL_COMMAND_NAMES = new Set(['roll_dice', 'flip_coin', 'time', 'anime', 'schedule', 'weather', 'search'])
 
 export function createToolCommandHandler(rateLimiter: RateLimiter) {
   return async function handleToolCommand(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -474,6 +480,15 @@ export function createToolCommandHandler(rateLimiter: RateLimiter) {
           await interaction.deferReply()
           const payload = await handleWeather(interaction)
           await interaction.editReply(payload)
+          break
+        }
+        case 'search': {
+          await interaction.deferReply()
+          const query = interaction.options.getString('query', true)
+          const flavor = randomFrom(FLAVOR.search)
+          const result = await searchWeb(query)
+          const text = `${flavor}\n\n🔍 **${query}**\n\n${result}`
+          await interaction.editReply(buildToolMessage(text, CURIOUS_COLOR))
           break
         }
       }
