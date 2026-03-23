@@ -1,14 +1,14 @@
 import { config } from './config.js'
 import { logger } from './utils/logger.js'
 import { createClient } from './discord/client.js'
-import { destroyAllSessions } from './session/sessionManager.js'
+import { destroyAllSessions } from './agent/roka.js'
 
 const client = createClient()
 
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'Shutdown signal received')
 
-  destroyAllSessions()
+  await destroyAllSessions()
   client.destroy()
 
   logger.info('Roka is going to sleep. Oyasumi~')

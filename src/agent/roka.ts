@@ -1,16 +1,12 @@
+import { LlmAgent, Runner, InMemorySessionService, GOOGLE_SEARCH, isFinalResponse } from '@google/adk'
+import type { Content, Part } from '@google/genai'
 import { logger } from '../utils/logger.js'
-import { assembleSystemPrompt, type AssemblerInput } from './promptAssembler.js'
+import { assembleSystemPrompt } from './promptAssembler.js'
 import { detectTone } from './toneDetector.js'
 import type { ToneKey } from './prompts/tones.js'
 import type { WindowMessage } from '../session/types.js'
 import { config } from '../config.js'
-import { getToolDeclarations, executeToolCall } from './tools/index.js'
-
-/**
- * Roka Agent — wraps Gemini API calls with the layered prompt system.
- * Uses @google/genai directly for now; will migrate to @google/adk
- * when the TypeScript ADK stabilizes with proper session support.
- */
+import { rokaTools } from './tools/index.js'
 
 export interface ImageAttachment {
   url: string
@@ -18,10 +14,9 @@ export interface ImageAttachment {
 }
 
 interface GenerateOptions {
+  channelId: string
   userMessage: string
   displayName: string
-  channelHistory: WindowMessage[]
-  participants: string[]
   imageAttachments?: ImageAttachment[]
 }
 
@@ -30,16 +25,137 @@ export interface GenerateResult {
   tone: ToneKey
 }
 
-/** Maximum number of function-calling round trips per request. */
-const MAX_TOOL_CALLS = 3
-
-/** Maximum image size in bytes (4 MB). Images larger than this are skipped. */
 const MAX_IMAGE_SIZE_BYTES = 4 * 1024 * 1024
+const APP_NAME = 'rokabot'
 
-/**
- * Download an image from a URL and return it as a base64-encoded string.
- * Returns null if the image exceeds the size limit or the download fails.
- */
+// Extends InMemorySessionService to cap event history per getSession call.
+class WindowedSessionService extends InMemorySessionService {
+  constructor(private maxEvents: number) {
+    super()
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  override async getSession(request: any): Promise<any> {
+    return super.getSession({
+      ...request,
+      config: { ...request?.config, numRecentEvents: this.maxEvents }
+    })
+  }
+}
+
+const sessionService = new WindowedSessionService(config.session.windowSize * 4)
+
+const rokaAgent = new LlmAgent({
+  name: 'roka',
+  model: config.gemini.model,
+  instruction: '',
+  tools: [...rokaTools, GOOGLE_SEARCH],
+  disallowTransferToParent: true,
+  disallowTransferToPeers: true,
+  generateContentConfig: {
+    temperature: 0.9,
+    topP: 0.95,
+    maxOutputTokens: config.gemini.maxOutputTokens,
+    httpOptions: { timeout: config.gemini.timeout }
+  },
+  beforeModelCallback: async ({ context, request }) => {
+    const prompt = context.state.get<string>('temp:systemPrompt')
+    if (prompt) {
+      request.config = request.config ?? ({} as NonNullable<typeof request.config>)
+      request.config!.systemInstruction = prompt
+    }
+    return undefined
+  },
+  afterModelCallback: async ({ response }) => {
+    if (!response.content?.parts) return undefined
+
+    for (const part of response.content.parts) {
+      if (part.text && !part.thought) {
+        part.text = part.text.replace(/^\[?Roka\]?:\s*/i, '').trim()
+      }
+    }
+
+    const hasText = response.content.parts.some((p) => p.text?.trim() && !p.thought)
+    const hasFunctionCall = response.content.parts.some((p) => 'functionCall' in p && p.functionCall)
+    if (!hasText && !hasFunctionCall) {
+      response.content.parts = [{ text: getRandomFallback() }]
+    }
+
+    return undefined
+  }
+})
+
+const runner = new Runner({
+  appName: APP_NAME,
+  agent: rokaAgent,
+  sessionService
+})
+
+// Idle timer management.
+
+const idleTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+function resetIdleTimer(channelId: string): void {
+  const existing = idleTimers.get(channelId)
+  if (existing) clearTimeout(existing)
+
+  const timer = setTimeout(() => {
+    logger.info({ channelId }, 'Session idle timeout')
+    void destroySession(channelId)
+  }, config.session.ttlMs)
+
+  idleTimers.set(channelId, timer)
+}
+
+async function ensureSession(channelId: string) {
+  let session = await sessionService.getSession({
+    appName: APP_NAME,
+    userId: channelId,
+    sessionId: channelId
+  })
+
+  if (!session) {
+    session = await sessionService.createSession({
+      appName: APP_NAME,
+      userId: channelId,
+      sessionId: channelId,
+      state: { participants: [] }
+    })
+    logger.info({ channelId }, 'ADK session created')
+  }
+
+  return session
+}
+
+export async function destroySession(channelId: string): Promise<void> {
+  const timer = idleTimers.get(channelId)
+  if (timer) {
+    clearTimeout(timer)
+    idleTimers.delete(channelId)
+  }
+
+  try {
+    await sessionService.deleteSession({
+      appName: APP_NAME,
+      userId: channelId,
+      sessionId: channelId
+    })
+    logger.info({ channelId }, 'ADK session destroyed')
+  } catch {
+    // Session may not exist
+  }
+}
+
+export async function destroyAllSessions(): Promise<void> {
+  const channels = [...idleTimers.keys()]
+  for (const channelId of channels) {
+    await destroySession(channelId)
+  }
+  logger.info('All ADK sessions destroyed')
+}
+
+// Helpers.
+
 async function downloadImage(url: string): Promise<{ data: string; mimeType: string } | null> {
   try {
     const response = await fetch(url)
@@ -70,86 +186,6 @@ async function downloadImage(url: string): Promise<{ data: string; mimeType: str
   }
 }
 
-/** Delay before retrying a 429 rate-limited request (ms). */
-const RETRY_DELAY_429_MS = 4_000
-
-/** Delay before retrying a 500/503 server error (ms). */
-const RETRY_DELAY_SERVER_MS = 2_000
-
-/**
- * Extract an HTTP status code from an unknown error thrown by @google/genai.
- * The SDK may expose it as .status, .httpStatusCode, or embed it in the message.
- */
-function getErrorStatus(error: unknown): number | null {
-  if (error == null || typeof error !== 'object') return null
-
-  const err = error as Record<string, unknown>
-
-  if (typeof err.status === 'number') return err.status
-  if (typeof err.httpStatusCode === 'number') return err.httpStatusCode
-
-  // Some SDK versions embed the status in the error message, e.g. "[429 Too Many Requests]"
-  if (typeof err.message === 'string') {
-    const match = err.message.match(/\b([45]\d{2})\b/)
-    if (match) return parseInt(match[1], 10)
-  }
-
-  return null
-}
-
-/**
- * Extract a Retry-After delay (in ms) from an error, if present.
- * The SDK may expose response headers or embed the value in the error.
- */
-function getRetryAfterMs(error: unknown): number | null {
-  if (error == null || typeof error !== 'object') return null
-
-  const err = error as Record<string, unknown>
-
-  // Check for a retryAfter property (some SDK versions)
-  if (typeof err.retryAfter === 'number') return err.retryAfter * 1000
-  if (typeof err.retryAfter === 'string') {
-    const seconds = parseFloat(err.retryAfter)
-    if (!isNaN(seconds)) return seconds * 1000
-  }
-
-  // Check nested headers
-  const headers = (err.headers ?? (err.response as Record<string, unknown> | undefined)?.headers) as
-    | Record<string, string>
-    | undefined
-  if (headers) {
-    const retryAfter = headers['retry-after'] ?? headers['Retry-After']
-    if (retryAfter) {
-      const seconds = parseFloat(retryAfter)
-      if (!isNaN(seconds)) return seconds * 1000
-    }
-  }
-
-  return null
-}
-
-/** Returns true for status codes that warrant a single retry. */
-function isRetryableStatus(status: number): boolean {
-  return status === 429 || status === 500 || status === 503
-}
-
-/** Determine the retry delay for a given error. */
-function getRetryDelayMs(error: unknown, status: number): number {
-  if (status === 429) {
-    const retryAfter = getRetryAfterMs(error)
-    return retryAfter ?? RETRY_DELAY_429_MS
-  }
-  return RETRY_DELAY_SERVER_MS
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-/**
- * Get the current hour in the configured timezone (from config.yml).
- * Falls back to the system's local time if no timezone is set or if the timezone is invalid.
- */
 function getLocalHour(): number {
   const tz = config.timezone
   if (!tz) return new Date().getHours()
@@ -162,204 +198,6 @@ function getLocalHour(): number {
   }
 }
 
-/**
- * Call the Gemini API with a configurable timeout and retry for transient errors.
- * Timeouts are NOT retried (they indicate the model is stuck).
- */
-async function callWithRetry(generateFn: (signal: AbortSignal) => Promise<string>): Promise<string> {
-  const maxAttempts = config.gemini.maxRetries + 1
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), config.gemini.timeout)
-
-    try {
-      const result = await generateFn(controller.signal)
-      return result
-    } catch (error) {
-      // Check if this was a timeout (AbortController fired)
-      if (controller.signal.aborted) {
-        logger.error({ timeoutMs: config.gemini.timeout }, 'Gemini API call timed out')
-        throw new Error('Gemini request timed out')
-      }
-
-      const status = getErrorStatus(error)
-
-      // On non-final attempt, retry if the status is retryable
-      if (attempt < maxAttempts - 1 && status !== null && isRetryableStatus(status)) {
-        const delayMs = getRetryDelayMs(error, status)
-        logger.warn({ status, delayMs, attempt: attempt + 1 }, 'Retrying Gemini API call after transient error')
-        await sleep(delayMs)
-        continue
-      }
-
-      // Second attempt or non-retryable error — propagate
-      throw error
-    } finally {
-      clearTimeout(timer)
-    }
-  }
-
-  // Unreachable, but satisfies TypeScript
-  throw new Error('Gemini retry loop exited unexpectedly')
-}
-
-export async function generateResponse(options: GenerateOptions): Promise<GenerateResult> {
-  const { userMessage, displayName, channelHistory, participants, imageAttachments } = options
-
-  const tone = detectTone(channelHistory)
-  const hour = getLocalHour()
-
-  const assemblerInput: AssemblerInput = { tone, participants, hour, displayName }
-  const systemPrompt = assembleSystemPrompt(assemblerInput)
-
-  logger.debug({ tone, participantCount: participants.length, hour }, 'Prompt assembled')
-
-  try {
-    // Dynamic import to allow graceful fallback
-    const { GoogleGenAI } = await import('@google/genai')
-
-    const ai = new GoogleGenAI({ apiKey: config.gemini.apiKey })
-
-    // Build image inline data parts for the current message (not replayed from history)
-    const imageParts: Array<{ inlineData: { data: string; mimeType: string } }> = []
-    if (imageAttachments?.length) {
-      const downloads = await Promise.all(imageAttachments.map((img) => downloadImage(img.url)))
-      for (const result of downloads) {
-        if (result) {
-          imageParts.push({ inlineData: { data: result.data, mimeType: result.mimeType } })
-        }
-      }
-      if (imageParts.length > 0) {
-        logger.debug({ imageCount: imageParts.length }, 'Attached images to Gemini request')
-      }
-    }
-
-    const currentUserParts: Array<{ text: string } | { inlineData: { data: string; mimeType: string } }> = [
-      ...imageParts,
-      { text: `[${displayName}]: ${userMessage}` }
-    ]
-
-    const contents = [
-      ...channelHistory.map((m) => ({
-        role: m.role === 'assistant' ? ('model' as const) : ('user' as const),
-        parts: [{ text: `[${m.displayName}]: ${m.content}` }]
-      })),
-      {
-        role: 'user' as const,
-        parts: currentUserParts
-      }
-    ]
-
-    logger.debug(
-      { model: config.gemini.model, historyLength: contents.length - 1, hasImages: imageParts.length > 0 },
-      'Sending Gemini request'
-    )
-
-    const text = await callWithRetry(async (signal: AbortSignal) => {
-      const toolDeclarations = getToolDeclarations()
-
-      // Mutable contents array for the function calling loop.
-      // Typed loosely to accommodate functionCall/functionResponse parts alongside text/inlineData parts.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const loopContents: Array<{ role: 'user' | 'model'; parts: any[] }> = [...contents]
-
-      for (let toolIteration = 0; toolIteration < MAX_TOOL_CALLS + 1; toolIteration++) {
-        const response = await ai.models.generateContent({
-          model: config.gemini.model,
-          contents: loopContents,
-          config: {
-            systemInstruction: systemPrompt,
-            maxOutputTokens: config.gemini.maxOutputTokens,
-            temperature: 0.9,
-            topP: 0.95,
-            httpOptions: { timeout: config.gemini.timeout },
-            abortSignal: signal,
-            tools: [{ functionDeclarations: toolDeclarations }]
-          }
-        })
-
-        const parts = response.candidates?.[0]?.content?.parts ?? []
-
-        // Check for function call
-        const functionCallPart = parts.find((p) => 'functionCall' in p && p.functionCall)
-
-        if (functionCallPart && 'functionCall' in functionCallPart && functionCallPart.functionCall) {
-          const { name, args } = functionCallPart.functionCall
-          logger.info({ tool: name, args }, 'Gemini requested tool call')
-
-          if (toolIteration >= MAX_TOOL_CALLS) {
-            logger.warn({ tool: name, iteration: toolIteration }, 'Max tool call iterations reached, returning text')
-            break
-          }
-
-          try {
-            const toolResult = await executeToolCall(name ?? '', (args ?? {}) as Record<string, unknown>)
-            logger.debug({ tool: name, resultKeys: Object.keys(toolResult) }, 'Tool executed successfully')
-
-            // Preserve the model's full response (including thought_signature) — required by Gemini
-            loopContents.push({
-              role: 'model' as const,
-              parts
-            })
-            loopContents.push({
-              role: 'user' as const,
-              parts: [{ functionResponse: { name: name ?? '', response: toolResult } }]
-            })
-
-            continue // Loop again to get the model's text response
-          } catch (toolError) {
-            logger.error({ tool: name, error: toolError }, 'Tool execution failed')
-            // Preserve the model's full response (including thought_signature) — required by Gemini
-            loopContents.push({
-              role: 'model' as const,
-              parts
-            })
-            loopContents.push({
-              role: 'user' as const,
-              parts: [{ functionResponse: { name: name ?? '', response: { error: 'Tool execution failed' } } }]
-            })
-            continue
-          }
-        }
-
-        // No function call — extract text response
-        const firstTextPart = parts.find(
-          (p): p is { text: string } => typeof p.text === 'string' && !('thought' in p && p.thought)
-        )
-        const responseText = firstTextPart?.text?.trim() ?? ''
-
-        if (!responseText) {
-          logger.warn('Empty response from Gemini')
-          return getRandomFallback()
-        }
-
-        logger.debug(
-          { responseLength: responseText.length, toolIterations: toolIteration },
-          'Gemini response extracted'
-        )
-        return responseText
-      }
-
-      // Fell through the loop (max iterations) — try to extract any text from last response
-      logger.warn('Function calling loop exhausted without text response')
-      return getRandomFallback()
-    })
-
-    return { text: stripRokaPrefix(text), tone }
-  } catch (error) {
-    logger.error({ error }, 'Gemini API call failed')
-    throw error
-  }
-}
-
-/**
- * Strip any leading "[Roka]:" or "Roka:" prefix that the model may
- * produce by mimicking the history format.
- */
-function stripRokaPrefix(text: string): string {
-  return text.replace(/^\[?Roka\]?:\s*/i, '').trim()
-}
-
 function getRandomFallback(): string {
   const fallbacks = [
     'Hmm? Sorry, I spaced out for a moment there~',
@@ -368,4 +206,96 @@ function getRandomFallback(): string {
     "I wasn't paying attention... don't tell anyone, okay?"
   ]
   return fallbacks[Math.floor(Math.random() * fallbacks.length)]
+}
+
+// Convert ADK session events to WindowMessages for tone detection.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function eventsToWindowMessages(events: any[]): WindowMessage[] {
+  return events
+    .filter((e) => e.content?.parts?.some((p: Part) => p.text && !p.thought))
+    .map((e) => ({
+      role: (e.author === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+      displayName: '',
+      content: e.content.parts
+        .filter((p: Part) => p.text && !p.thought)
+        .map((p: Part) => p.text)
+        .join(' '),
+      timestamp: e.timestamp ?? 0
+    }))
+}
+
+// Main entry point.
+
+export async function generateResponse(options: GenerateOptions): Promise<GenerateResult> {
+  const { channelId, userMessage, displayName, imageAttachments } = options
+
+  const session = await ensureSession(channelId)
+  resetIdleTimer(channelId)
+
+  // Track participants across the session.
+  const storedParticipants = (session.state?.participants as string[]) ?? []
+  const participants = [...new Set([...storedParticipants, displayName])]
+
+  // Detect tone from recent session history.
+  const fakeMessages = eventsToWindowMessages(session.events ?? [])
+  const tone = detectTone(fakeMessages)
+  const hour = getLocalHour()
+
+  const systemPrompt = assembleSystemPrompt({ tone, participants, hour, displayName })
+
+  logger.debug({ tone, participantCount: participants.length, hour }, 'Prompt assembled')
+
+  // Build user message content with optional images.
+  const imageParts: Part[] = []
+  if (imageAttachments?.length) {
+    const downloads = await Promise.all(imageAttachments.map((img) => downloadImage(img.url)))
+    for (const result of downloads) {
+      if (result) {
+        imageParts.push({ inlineData: { data: result.data, mimeType: result.mimeType } })
+      }
+    }
+    if (imageParts.length > 0) {
+      logger.debug({ imageCount: imageParts.length }, 'Attached images to request')
+    }
+  }
+
+  const newMessage: Content = {
+    role: 'user',
+    parts: [...imageParts, { text: `[${displayName}]: ${userMessage}` }]
+  }
+
+  logger.debug(
+    { model: config.gemini.model, sessionEvents: session.events?.length ?? 0, hasImages: imageParts.length > 0 },
+    'Sending ADK request'
+  )
+
+  try {
+    let responseText = ''
+
+    for await (const event of runner.runAsync({
+      userId: channelId,
+      sessionId: channelId,
+      newMessage,
+      stateDelta: { 'temp:systemPrompt': systemPrompt, participants },
+      runConfig: { maxLlmCalls: 4 }
+    })) {
+      if (isFinalResponse(event) && event.content?.parts) {
+        responseText = event.content.parts
+          .filter((p: Part) => p.text && !p.thought)
+          .map((p: Part) => p.text)
+          .join('')
+          .trim()
+      }
+    }
+
+    if (!responseText) {
+      responseText = getRandomFallback()
+    }
+
+    logger.debug({ responseLength: responseText.length }, 'ADK response extracted')
+    return { text: responseText, tone }
+  } catch (error) {
+    logger.error({ error }, 'ADK request failed')
+    throw error
+  }
 }

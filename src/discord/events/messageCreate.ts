@@ -4,7 +4,6 @@ import { logger } from '../../utils/logger.js'
 import { RateLimiter } from '../../utils/rateLimiter.js'
 import { getRandomBusy, getRandomDecline, getRandomEmptyMention, getRandomError, splitResponse } from '../responses.js'
 import { buildRokaMessage } from '../messageBuilder.js'
-import { addMessage, getHistory, getOrCreateSession } from '../../session/sessionManager.js'
 import { generateResponse, type ImageAttachment } from '../../agent/roka.js'
 import { isChannelBusy, markBusy, markFree } from '../concurrency.js'
 
@@ -172,36 +171,14 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
 
     markBusy(channelId)
     try {
-      getOrCreateSession(channelId)
-
-      addMessage(channelId, {
-        role: 'user',
-        displayName,
-        content,
-        timestamp: Date.now()
-      })
-
-      const history = getHistory(channelId)
-      const participants = [...new Set(history.map((m) => m.displayName))]
-
-      logger.debug({ channelId, historySize: history.length, participants }, 'Calling Gemini')
-
       const { text: responseText, tone } = await generateResponse({
+        channelId,
         userMessage: content || '(shared an image)',
         displayName,
-        channelHistory: history.slice(0, -1),
-        participants,
         imageAttachments: imageAttachments.length > 0 ? imageAttachments : undefined
       })
 
-      addMessage(channelId, {
-        role: 'assistant',
-        displayName: 'Roka',
-        content: responseText,
-        timestamp: Date.now()
-      })
-
-      logger.debug({ channelId, tone, responseLength: responseText.length }, 'Gemini response received')
+      logger.debug({ channelId, tone, responseLength: responseText.length }, 'ADK response received')
 
       const chunks = splitResponse(responseText)
       logger.debug({ channelId, chunkCount: chunks.length }, 'Response split into chunks')
