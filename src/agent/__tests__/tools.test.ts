@@ -348,4 +348,3 @@ describe('getWeather', () => {
     expect(result.temperature).toBe(0)
   })
 })
-
