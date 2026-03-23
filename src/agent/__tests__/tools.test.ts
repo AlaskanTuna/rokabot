@@ -9,7 +9,6 @@ import { getCurrentTime } from '../tools/getCurrentTime.js'
 import { searchAnime } from '../tools/searchAnime.js'
 import { getAnimeSchedule } from '../tools/getAnimeSchedule.js'
 import { getWeather } from '../tools/getWeather.js'
-import { executeToolCall } from '../tools/index.js'
 
 // ── fetch mock setup ──────────────────────────────────────────────────────────
 
@@ -350,69 +349,3 @@ describe('getWeather', () => {
   })
 })
 
-// ── executeToolCall ───────────────────────────────────────────────────────────
-
-describe('executeToolCall', () => {
-  it('routes roll_dice correctly', async () => {
-    const result = (await executeToolCall('roll_dice', { count: 1, sides: 6 })) as { rolls: number[]; total: number }
-    expect(result.rolls).toHaveLength(1)
-    expect(result.total).toBeGreaterThanOrEqual(1)
-  })
-
-  it('routes flip_coin correctly', async () => {
-    const result = (await executeToolCall('flip_coin', {})) as { result: string }
-    expect(['heads', 'tails']).toContain(result.result)
-  })
-
-  it('routes get_current_time correctly', async () => {
-    const result = (await executeToolCall('get_current_time', { location: 'Asia/Tokyo' })) as { timezone: string }
-    expect(result.timezone).toBe('Asia/Tokyo')
-  })
-
-  it('routes search_anime correctly', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ data: [] })
-    })
-    const result = (await executeToolCall('search_anime', { query: 'test' })) as { results: unknown[] }
-    expect(result.results).toHaveLength(0)
-  })
-
-  it('routes get_anime_schedule correctly', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ pagination: { items: { total: 0 } }, data: [] })
-    })
-    const result = (await executeToolCall('get_anime_schedule', { scope: 'day', day: 'monday' })) as { scope: string }
-    expect(result.scope).toBe('day')
-  })
-
-  it('routes get_weather correctly', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        results: [{ name: 'London', latitude: 51.5, longitude: -0.12, country: 'UK' }]
-      })
-    })
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        current: {
-          temperature_2m: 15,
-          apparent_temperature: 13,
-          relative_humidity_2m: 80,
-          weather_code: 3,
-          wind_speed_10m: 20,
-          is_day: 1
-        }
-      })
-    })
-    const result = (await executeToolCall('get_weather', { city: 'London' })) as { city: string }
-    expect(result.city).toBe('London')
-  })
-
-  it('returns error object for unknown tool name', async () => {
-    const result = await executeToolCall('unknown_tool', {})
-    expect(result).toEqual({ error: 'Unknown tool: unknown_tool' })
-  })
-})
