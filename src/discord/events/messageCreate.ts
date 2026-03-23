@@ -155,13 +155,15 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
         'Rate limit hit — declining'
       )
 
-      await message.reply(getRandomDecline())
+      const declineMsg = await message.reply(getRandomDecline())
+      setTimeout(() => declineMsg.delete().catch(() => {}), 5000)
       return
     }
 
     if (isChannelBusy(channelId)) {
       logger.debug({ channelId }, 'Channel busy — sending busy message')
-      await message.reply(getRandomBusy())
+      const busyMsg = await message.reply(getRandomBusy())
+      setTimeout(() => busyMsg.delete().catch(() => {}), 5000)
       return
     }
 

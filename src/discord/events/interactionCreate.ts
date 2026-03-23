@@ -41,13 +41,15 @@ export function createInteractionHandler(rateLimiter: RateLimiter) {
         'Rate limit hit — declining'
       )
 
-      await interaction.reply({ content: getRandomDecline() })
+      const declineReply = await interaction.reply({ content: getRandomDecline(), fetchReply: true })
+      setTimeout(() => declineReply.delete().catch(() => {}), 5000)
       return
     }
 
     if (isChannelBusy(channelId)) {
       logger.debug({ channelId }, 'Channel busy — sending busy message')
-      await interaction.reply({ content: getRandomBusy() })
+      const busyReply = await interaction.reply({ content: getRandomBusy(), fetchReply: true })
+      setTimeout(() => busyReply.delete().catch(() => {}), 5000)
       return
     }
 
