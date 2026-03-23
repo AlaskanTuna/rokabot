@@ -1,4 +1,4 @@
-import { LlmAgent, Runner, InMemorySessionService, GOOGLE_SEARCH, isFinalResponse } from '@google/adk'
+import { LlmAgent, Runner, InMemorySessionService, isFinalResponse, GOOGLE_SEARCH } from '@google/adk'
 import type { Content, Part } from '@google/genai'
 import { logger } from '../utils/logger.js'
 import { assembleSystemPrompt } from './promptAssembler.js'
@@ -45,13 +45,22 @@ class WindowedSessionService extends InMemorySessionService {
 
 const sessionService = new WindowedSessionService(config.session.windowSize * 4)
 
+// Sub-agent for Google Search grounding (isolated to avoid per-request quota burn).
+const searchAgent = new LlmAgent({
+  name: 'search_agent',
+  model: config.gemini.model,
+  description: 'Searches the web for current events, news, or real-time information that Roka would not know.',
+  instruction: 'You are a search helper. Return factual, concise search results. Do not add personality or roleplay.',
+  tools: [GOOGLE_SEARCH]
+})
+
 const rokaAgent = new LlmAgent({
   name: 'roka',
   model: config.gemini.model,
   instruction: '',
-  tools: [...rokaTools, GOOGLE_SEARCH],
+  tools: [...rokaTools],
+  subAgents: [searchAgent],
   disallowTransferToParent: true,
-  disallowTransferToPeers: true,
   generateContentConfig: {
     temperature: 0.9,
     topP: 0.95,
@@ -59,7 +68,7 @@ const rokaAgent = new LlmAgent({
     httpOptions: { timeout: config.gemini.timeout }
   },
   beforeModelCallback: async ({ context, request }) => {
-    const prompt = context.state.get<string>('temp:systemPrompt')
+    const prompt = context.state.get<string>('_systemPrompt')
     if (prompt) {
       request.config = request.config ?? ({} as NonNullable<typeof request.config>)
       request.config!.systemInstruction = prompt
@@ -81,6 +90,10 @@ const rokaAgent = new LlmAgent({
       response.content.parts = [{ text: getRandomFallback() }]
     }
 
+    return undefined
+  },
+  beforeToolCallback: async ({ tool, args }) => {
+    logger.info({ tool: tool.name, args }, 'Tool call requested')
     return undefined
   }
 })
@@ -276,7 +289,7 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
       userId: channelId,
       sessionId: channelId,
       newMessage,
-      stateDelta: { 'temp:systemPrompt': systemPrompt, participants },
+      stateDelta: { _systemPrompt: systemPrompt, participants },
       runConfig: { maxLlmCalls: 4 }
     })) {
       if (isFinalResponse(event) && event.content?.parts) {
