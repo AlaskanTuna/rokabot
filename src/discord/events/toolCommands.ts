@@ -8,7 +8,7 @@ import { getCurrentTime } from '../../agent/tools/getCurrentTime.js'
 import { getWeather } from '../../agent/tools/getWeather.js'
 import { searchAnime, type SearchAnimeParams } from '../../agent/tools/searchAnime.js'
 import { getAnimeSchedule } from '../../agent/tools/getAnimeSchedule.js'
-import { generateResponse } from '../../agent/roka.js'
+import { searchWeb } from '../../agent/tools/searchWeb.js'
 
 // COLOR CONSTANTS
 const PLAYFUL_COLOR = 0xffb3d9
@@ -485,15 +485,21 @@ export function createToolCommandHandler(rateLimiter: RateLimiter) {
         case 'search': {
           await interaction.deferReply()
           const query = interaction.options.getString('query', true)
-          const channelId = interaction.channelId
-          const member = interaction.member
-          const displayName = member && 'displayName' in member ? member.displayName : interaction.user.displayName
-          const { text, tone } = await generateResponse({
-            channelId,
-            userMessage: `Search the web for: ${query}`,
-            displayName
-          })
-          await interaction.editReply(buildToolMessage(text, tone === 'curious' ? CURIOUS_COLOR : PLAYFUL_COLOR))
+          const flavor = randomFrom(FLAVOR.search)
+          const result = await searchWeb({ query })
+          const lines = [flavor, '', `🔍 **${query}**`]
+          if (result.answer && result.answer !== 'No summary available.') {
+            lines.push('', result.answer)
+          }
+          if (result.results.length > 0) {
+            lines.push('')
+            for (const r of result.results.slice(0, 3)) {
+              lines.push(`[\u2197 ${r.title}](${r.url})`)
+            }
+          } else if (!result.answer || result.answer === 'No summary available.') {
+            lines.push('', "Hmm, I couldn't find anything for that~ Maybe try a different query?")
+          }
+          await interaction.editReply(buildToolMessage(lines.join('\n'), CURIOUS_COLOR))
           break
         }
       }

@@ -1,4 +1,5 @@
-import { LlmAgent, Runner, InMemorySessionService, isFinalResponse } from '@google/adk'
+import { LlmAgent, Runner, InMemorySessionService, isFinalResponse, BasePlugin } from '@google/adk'
+import type { LlmResponse } from '@google/adk'
 import type { Content, Part } from '@google/genai'
 import { logger } from '../utils/logger.js'
 import { assembleSystemPrompt } from './promptAssembler.js'
@@ -42,7 +43,7 @@ class WindowedSessionService extends InMemorySessionService {
   }
 }
 
-const sessionService = new WindowedSessionService(config.session.windowSize * 4)
+const sessionService = new WindowedSessionService(config.session.windowSize * 2)
 
 const rokaAgent = new LlmAgent({
   name: 'roka',
@@ -88,10 +89,25 @@ const rokaAgent = new LlmAgent({
   }
 })
 
+// Intercepts Gemini API errors before the ADK's broken JSON.parse.
+class ErrorRecoveryPlugin extends BasePlugin {
+  async onModelErrorCallback({
+    error
+  }: {
+    callbackContext: unknown
+    llmRequest: unknown
+    error: Error
+  }): Promise<LlmResponse | undefined> {
+    logger.error({ errorMessage: error.message }, 'Gemini API error intercepted')
+    return { content: { role: 'model', parts: [{ text: getRandomFallback() }] } }
+  }
+}
+
 const runner = new Runner({
   appName: APP_NAME,
   agent: rokaAgent,
-  sessionService
+  sessionService,
+  plugins: [new ErrorRecoveryPlugin('error-recovery')]
 })
 
 // Idle timer management.
@@ -273,21 +289,33 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
 
   try {
     let responseText = ''
+    const abortController = new AbortController()
+    const timeoutId = setTimeout(() => abortController.abort(), config.gemini.timeout)
 
-    for await (const event of runner.runAsync({
-      userId: channelId,
-      sessionId: channelId,
-      newMessage,
-      stateDelta: { _systemPrompt: systemPrompt, participants },
-      runConfig: { maxLlmCalls: 4 }
-    })) {
-      if (isFinalResponse(event) && event.content?.parts) {
-        responseText = event.content.parts
-          .filter((p: Part) => p.text && !p.thought)
-          .map((p: Part) => p.text)
-          .join('')
-          .trim()
+    try {
+      for await (const event of runner.runAsync({
+        userId: channelId,
+        sessionId: channelId,
+        newMessage,
+        stateDelta: { _systemPrompt: systemPrompt, participants },
+        runConfig: { maxLlmCalls: 4 }
+      })) {
+        if (abortController.signal.aborted) break
+        if (isFinalResponse(event) && event.content?.parts) {
+          responseText = event.content.parts
+            .filter((p: Part) => p.text && !p.thought)
+            .map((p: Part) => p.text)
+            .join('')
+            .trim()
+        }
       }
+    } finally {
+      clearTimeout(timeoutId)
+    }
+
+    if (abortController.signal.aborted && !responseText) {
+      logger.warn({ channelId }, 'Client-side timeout triggered for ADK runner')
+      responseText = getRandomFallback()
     }
 
     if (!responseText) {

@@ -51,7 +51,7 @@ export const getCurrentTimeTool = new FunctionTool({
 export const searchAnimeTool = new FunctionTool({
   name: 'search_anime',
   description:
-    'Search for anime by title or keyword using MyAnimeList. If results are empty or missing info (e.g. upcoming anime not yet listed), try search_web as a fallback.',
+    'Search for anime by title or keyword. ALWAYS use this first for anime questions before trying search_web.',
   parameters: z.object({
     query: z.string().describe('Anime title or search keyword'),
     limit: z.number().int().describe('Number of results to return (1-25). Defaults to 5.').optional(),
@@ -68,7 +68,7 @@ export const searchAnimeTool = new FunctionTool({
 export const getAnimeScheduleTool = new FunctionTool({
   name: 'get_anime_schedule',
   description:
-    'Get the anime airing schedule from MyAnimeList. Can check a specific day, the full week, or current season. If results are empty or the anime is not yet listed, try search_web as a fallback.',
+    'Get anime airing schedule. ALWAYS use this first for schedule/airing questions before trying search_web. Can check a specific day, the full week, or current season.',
   parameters: z.object({
     scope: z
       .enum(['day', 'week', 'season'])
@@ -106,7 +106,7 @@ export const getWeatherTool = new FunctionTool({
 export const searchWebTool = new FunctionTool({
   name: 'search_web',
   description:
-    'Search the web for current events, news, or real-time information. Use when someone asks about recent news, current events, or anything that requires up-to-date information.',
+    'FALLBACK: Search the web. Only use this when other tools (search_anime, get_anime_schedule, get_weather, get_current_time) cannot answer the question, OR when the user explicitly asks about recent news and current events.',
   parameters: z.object({
     query: z.string().describe('Search query'),
     topic: z.enum(['general', 'news']).describe('Search topic. Use news for current events.').optional(),
