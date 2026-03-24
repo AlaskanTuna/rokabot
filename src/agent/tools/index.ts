@@ -51,7 +51,7 @@ export const getCurrentTimeTool = new FunctionTool({
 export const searchAnimeTool = new FunctionTool({
   name: 'search_anime',
   description:
-    'Search for anime by title or keyword. Use when someone asks about a specific anime, wants recommendations, or wants to look up anime information.',
+    'Search for anime by title or keyword using MyAnimeList. If results are empty or missing info (e.g. upcoming anime not yet listed), try search_web as a fallback.',
   parameters: z.object({
     query: z.string().describe('Anime title or search keyword'),
     limit: z.number().int().describe('Number of results to return (1-25). Defaults to 5.').optional(),
@@ -68,7 +68,7 @@ export const searchAnimeTool = new FunctionTool({
 export const getAnimeScheduleTool = new FunctionTool({
   name: 'get_anime_schedule',
   description:
-    'Get the anime airing schedule. Can check a specific day, the full week, or current season. Can also look up broadcast times for a specific anime by name.',
+    'Get the anime airing schedule from MyAnimeList. Can check a specific day, the full week, or current season. If results are empty or the anime is not yet listed, try search_web as a fallback.',
   parameters: z.object({
     scope: z
       .enum(['day', 'week', 'season'])

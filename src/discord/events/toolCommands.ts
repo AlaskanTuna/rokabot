@@ -8,7 +8,7 @@ import { getCurrentTime } from '../../agent/tools/getCurrentTime.js'
 import { getWeather } from '../../agent/tools/getWeather.js'
 import { searchAnime, type SearchAnimeParams } from '../../agent/tools/searchAnime.js'
 import { getAnimeSchedule } from '../../agent/tools/getAnimeSchedule.js'
-import { searchWeb } from '../../agent/tools/searchWeb.js'
+import { generateResponse } from '../../agent/roka.js'
 
 // COLOR CONSTANTS
 const PLAYFUL_COLOR = 0xffb3d9
@@ -485,14 +485,15 @@ export function createToolCommandHandler(rateLimiter: RateLimiter) {
         case 'search': {
           await interaction.deferReply()
           const query = interaction.options.getString('query', true)
-          const flavor = randomFrom(FLAVOR.search)
-          const result = await searchWeb({ query })
-          const lines = [flavor, '', `🔍 **${query}**`]
-          if (result.answer) lines.push('', result.answer)
-          for (const r of result.results.slice(0, 3)) {
-            lines.push('', `**${r.title}**`, r.snippet)
-          }
-          await interaction.editReply(buildToolMessage(lines.join('\n'), CURIOUS_COLOR))
+          const channelId = interaction.channelId
+          const member = interaction.member
+          const displayName = member && 'displayName' in member ? member.displayName : interaction.user.displayName
+          const { text, tone } = await generateResponse({
+            channelId,
+            userMessage: `Search the web for: ${query}`,
+            displayName
+          })
+          await interaction.editReply(buildToolMessage(text, tone === 'curious' ? CURIOUS_COLOR : PLAYFUL_COLOR))
           break
         }
       }

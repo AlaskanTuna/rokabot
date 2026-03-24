@@ -297,7 +297,16 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
     logger.debug({ responseLength: responseText.length }, 'ADK response extracted')
     return { text: responseText, tone }
   } catch (error) {
-    logger.error({ error }, 'ADK request failed')
+    const errDetail =
+      error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error
+    logger.error({ error: errDetail, channelId }, 'ADK request failed')
+
+    // If session is corrupted or too large, destroy it so the next request starts fresh.
+    if (error instanceof SyntaxError) {
+      logger.warn({ channelId }, 'Session likely corrupted, destroying for recovery')
+      await destroySession(channelId)
+    }
+
     throw error
   }
 }

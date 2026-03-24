@@ -28,6 +28,7 @@ export async function searchWeb(
   }
 
   const { query, topic = 'general', max_results = 5 } = params
+  const today = new Date().toISOString().split('T')[0]
 
   try {
     const response = await fetch('https://api.tavily.com/search', {
@@ -37,7 +38,7 @@ export async function searchWeb(
         Authorization: `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        query,
+        query: `${query} (as of ${today})`,
         topic,
         max_results,
         include_answer: 'basic'
