@@ -1,4 +1,4 @@
-import { LlmAgent, Runner, InMemorySessionService, isFinalResponse, GOOGLE_SEARCH } from '@google/adk'
+import { LlmAgent, Runner, InMemorySessionService, isFinalResponse } from '@google/adk'
 import type { Content, Part } from '@google/genai'
 import { logger } from '../utils/logger.js'
 import { assembleSystemPrompt } from './promptAssembler.js'
@@ -44,22 +44,13 @@ class WindowedSessionService extends InMemorySessionService {
 
 const sessionService = new WindowedSessionService(config.session.windowSize * 4)
 
-// Sub-agent for Google Search grounding (isolated to avoid per-request quota burn).
-const searchAgent = new LlmAgent({
-  name: 'search_agent',
-  model: config.gemini.model,
-  description: 'Searches the web for current events, news, or real-time information that Roka would not know.',
-  instruction: 'You are a search helper. Return factual, concise search results. Do not add personality or roleplay.',
-  tools: [GOOGLE_SEARCH]
-})
-
 const rokaAgent = new LlmAgent({
   name: 'roka',
   model: config.gemini.model,
   instruction: '',
   tools: [...rokaTools],
-  subAgents: [searchAgent],
   disallowTransferToParent: true,
+  disallowTransferToPeers: true,
   generateContentConfig: {
     temperature: 0.9,
     topP: 0.95,
@@ -308,46 +299,5 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
   } catch (error) {
     logger.error({ error }, 'ADK request failed')
     throw error
-  }
-}
-
-// Standalone web search via the search sub-agent
-
-const searchSessionService = new InMemorySessionService()
-const searchRunner = new Runner({ appName: 'rokabot-search', agent: searchAgent, sessionService: searchSessionService })
-
-export async function searchWeb(query: string): Promise<string> {
-  const sessionId = `search-${Date.now()}`
-
-  await searchSessionService.createSession({
-    appName: 'rokabot-search',
-    userId: 'search',
-    sessionId
-  })
-
-  try {
-    let resultText = ''
-
-    for await (const event of searchRunner.runAsync({
-      userId: 'search',
-      sessionId,
-      newMessage: { role: 'user', parts: [{ text: query }] },
-      runConfig: { maxLlmCalls: 2 }
-    })) {
-      if (isFinalResponse(event) && event.content?.parts) {
-        resultText = event.content.parts
-          .filter((p: Part) => p.text && !p.thought)
-          .map((p: Part) => p.text)
-          .join('')
-          .trim()
-      }
-    }
-
-    return resultText || 'No results found.'
-  } catch (error) {
-    logger.error({ error }, 'Web search failed')
-    throw error
-  } finally {
-    await searchSessionService.deleteSession({ appName: 'rokabot-search', userId: 'search', sessionId }).catch(() => {})
   }
 }

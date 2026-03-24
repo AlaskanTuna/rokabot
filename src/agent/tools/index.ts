@@ -6,13 +6,15 @@ import { getCurrentTime } from './getCurrentTime.js'
 import { searchAnime } from './searchAnime.js'
 import { getAnimeSchedule } from './getAnimeSchedule.js'
 import { getWeather } from './getWeather.js'
+import { searchWeb } from './searchWeb.js'
 
-export { rollDice, flipCoin, getCurrentTime, searchAnime, getAnimeSchedule, getWeather }
+export { rollDice, flipCoin, getCurrentTime, searchAnime, getAnimeSchedule, getWeather, searchWeb }
 export type { RollDiceParams } from './rollDice.js'
 export type { GetCurrentTimeParams } from './getCurrentTime.js'
 export type { SearchAnimeParams } from './searchAnime.js'
 export type { GetAnimeScheduleParams } from './getAnimeSchedule.js'
 export type { GetWeatherParams } from './getWeather.js'
+export type { SearchWebParams } from './searchWeb.js'
 
 // ADK FunctionTool definitions with Zod schemas.
 
@@ -101,6 +103,18 @@ export const getWeatherTool = new FunctionTool({
   execute: async (input) => await getWeather(input)
 })
 
+export const searchWebTool = new FunctionTool({
+  name: 'search_web',
+  description:
+    'Search the web for current events, news, or real-time information. Use when someone asks about recent news, current events, or anything that requires up-to-date information.',
+  parameters: z.object({
+    query: z.string().describe('Search query'),
+    topic: z.enum(['general', 'news']).describe('Search topic. Use news for current events.').optional(),
+    max_results: z.number().int().describe('Number of results (1-10). Defaults to 5.').optional()
+  }),
+  execute: async (input) => await searchWeb(input)
+})
+
 // All ADK FunctionTool instances for use with LlmAgent.
 export const rokaTools = [
   rollDiceTool,
@@ -108,5 +122,6 @@ export const rokaTools = [
   getCurrentTimeTool,
   searchAnimeTool,
   getAnimeScheduleTool,
-  getWeatherTool
+  getWeatherTool,
+  searchWebTool
 ]
