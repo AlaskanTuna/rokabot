@@ -58,7 +58,7 @@ graph TD
 How a user message flows through the system and becomes a styled, in-character reply:
 
 ```mermaid
-flowchart TD
+flowchart LR
     Start([User message]) --> Guards{Rate limit +\nconcurrency OK?}
     Guards -->|No| Reject([Decline / busy])
     Guards -->|Yes| Session["Get or create ADK session"]
@@ -79,7 +79,7 @@ flowchart TD
 The ADK Runner handles tool orchestration automatically. Tools are declared as `FunctionTool` instances with Zod schemas:
 
 ```mermaid
-flowchart TD
+flowchart LR
     Agent["Roka Agent"] -->|generates| FC["Function Call\n(from Gemini)"]
     FC --> Router["ADK Runner\nauto-dispatches"]
     Router --> Tool["Tool executes\n(rollDice, searchAnime, etc.)"]
@@ -109,7 +109,7 @@ Tools available to the agent:
 The system prompt is assembled from 4 layers, kept within a ~1000-1600 token budget:
 
 ```mermaid
-flowchart LR
+flowchart TD
     L0["Layer 0\nCore Identity"] --> Combine
     L1["Layer 1\nSpeech Patterns"] --> Combine
     L2["Layer 2\nTone Variant"] --> Combine
@@ -130,7 +130,7 @@ flowchart LR
 Sessions are per-channel, managed via ADK's `InMemorySessionService` with a custom windowed variant that caps event history:
 
 ```mermaid
-flowchart TD
+flowchart LR
     Msg([New message]) --> Get["Get or create\nADK session"]
     Get --> Window["Session stores up to\n10 messages (events)"]
     Window --> Timer["Reset 5-min\nidle timer"]
