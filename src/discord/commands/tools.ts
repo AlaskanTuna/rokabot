@@ -1,3 +1,5 @@
+/** Slash command definitions for direct tool invocations (dice, coin, time, anime, weather, search). */
+
 import { SlashCommandBuilder } from 'discord.js'
 
 export const rollDiceCommand = new SlashCommandBuilder()

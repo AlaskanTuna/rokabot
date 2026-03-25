@@ -8,6 +8,7 @@ import { generateResponse, type ImageAttachment } from '../../agent/roka.js'
 import { isChannelBusy, markBusy, markFree } from '../concurrency.js'
 import { createToolCommandHandler } from './toolCommands.js'
 
+/** Create a handler for all slash command interactions (chat + tool commands). */
 export function createInteractionHandler(rateLimiter: RateLimiter) {
   const handleToolCommand = createToolCommandHandler(rateLimiter)
 
@@ -25,7 +26,6 @@ export function createInteractionHandler(rateLimiter: RateLimiter) {
     const member = interaction.member
     const displayName = member && 'displayName' in member ? member.displayName : interaction.user.displayName
 
-    // Extract image attachment if provided and it has a valid image content type
     const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp'])
     const imageAttachments: ImageAttachment[] = []
     if (attachment?.contentType && ALLOWED_IMAGE_TYPES.has(attachment.contentType)) {

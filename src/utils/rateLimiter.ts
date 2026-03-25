@@ -5,6 +5,10 @@ export interface RateLimiterConfig {
   rpd: number
 }
 
+/**
+ * Token-bucket rate limiter with per-minute (RPM) and per-day (RPD) caps.
+ * Tokens refill continuously; daily counter resets at midnight UTC.
+ */
 export class RateLimiter {
   private tokens: number
   private readonly maxTokens: number
@@ -26,6 +30,7 @@ export class RateLimiter {
     this.dailyResetDate = this.todayString()
   }
 
+  /** Attempt to consume one token; returns false if either limit is exhausted. */
   tryConsume(): boolean {
     this.checkDailyReset()
     this.refillTokens()

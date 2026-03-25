@@ -1,3 +1,8 @@
+/**
+ * In-memory session manager — maps channel IDs to conversation state.
+ * Sessions are ephemeral: a bot restart clears all history.
+ */
+
 import { config } from '../config.js'
 import { logger } from '../utils/logger.js'
 import type { ChannelSession, WindowMessage } from './types.js'
@@ -5,6 +10,7 @@ import { pushMessage } from './messageWindow.js'
 
 const sessions = new Map<string, ChannelSession>()
 
+/** Retrieve an existing session or create a fresh one, resetting the idle timer either way. */
 export function getOrCreateSession(channelId: string): ChannelSession {
   let session = sessions.get(channelId)
 
@@ -56,6 +62,7 @@ export function getSessionCount(): number {
   return sessions.size
 }
 
+/** Restart the idle timeout — destroys the session after TTL inactivity. */
 function resetIdleTimer(session: ChannelSession): void {
   if (session.idleTimer) {
     clearTimeout(session.idleTimer)

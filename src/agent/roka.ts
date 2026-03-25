@@ -1,3 +1,8 @@
+/**
+ * Roka agent — orchestrates the ADK pipeline for in-character response generation.
+ * Manages per-channel ADK sessions, idle timers, tone detection, and image handling.
+ */
+
 import { LlmAgent, Runner, InMemorySessionService, isFinalResponse, BasePlugin } from '@google/adk'
 import type { LlmResponse } from '@google/adk'
 import type { Content, Part } from '@google/genai'
@@ -29,10 +34,10 @@ export interface GenerateResult {
 const MAX_IMAGE_SIZE_BYTES = 4 * 1024 * 1024
 const APP_NAME = 'rokabot'
 
-// Tracks tool calls within a single generateResponse invocation; reset per request
+// Reset per request to track tool fallback chains within a single invocation
 let toolCallsThisRequest: string[] = []
 
-// Extends InMemorySessionService to cap event history per getSession call
+/** Caps event history returned by getSession to keep context within budget. */
 class WindowedSessionService extends InMemorySessionService {
   constructor(private maxEvents: number) {
     super()
@@ -61,6 +66,7 @@ const rokaAgent = new LlmAgent({
     maxOutputTokens: config.gemini.maxOutputTokens,
     httpOptions: { timeout: config.gemini.timeout }
   },
+  // Inject the assembled system prompt from session state before each LLM call
   beforeModelCallback: async ({ context, request }) => {
     const prompt = context.state.get<string>('_systemPrompt')
     if (prompt) {
@@ -69,6 +75,7 @@ const rokaAgent = new LlmAgent({
     }
     return undefined
   },
+  // Strip "[Roka]:" prefixes the model sometimes generates, and inject fallback on empty
   afterModelCallback: async ({ response }) => {
     if (!response.content?.parts) return undefined
 
@@ -93,7 +100,7 @@ const rokaAgent = new LlmAgent({
   }
 })
 
-// Intercepts Gemini API errors before the ADK's broken JSON.parse.
+/** Intercepts Gemini API errors and returns an in-character fallback instead of crashing. */
 class ErrorRecoveryPlugin extends BasePlugin {
   async onModelErrorCallback({
     error
@@ -114,7 +121,7 @@ const runner = new Runner({
   plugins: [new ErrorRecoveryPlugin('error-recovery')]
 })
 
-// Idle timer management.
+// Per-channel idle timers — destroys the ADK session after TTL inactivity
 
 const idleTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
@@ -130,6 +137,7 @@ function resetIdleTimer(channelId: string): void {
   idleTimers.set(channelId, timer)
 }
 
+/** Retrieve or create an ADK session for the given channel. */
 async function ensureSession(channelId: string) {
   let session = await sessionService.getSession({
     appName: APP_NAME,
@@ -150,6 +158,7 @@ async function ensureSession(channelId: string) {
   return session
 }
 
+/** Clear the idle timer and delete the ADK session for a channel. */
 export async function destroySession(channelId: string): Promise<void> {
   const timer = idleTimers.get(channelId)
   if (timer) {
@@ -169,6 +178,7 @@ export async function destroySession(channelId: string): Promise<void> {
   }
 }
 
+/** Destroy every active ADK session — called during graceful shutdown. */
 export async function destroyAllSessions(): Promise<void> {
   const channels = [...idleTimers.keys()]
   for (const channelId of channels) {
@@ -177,8 +187,7 @@ export async function destroyAllSessions(): Promise<void> {
   logger.info('All ADK sessions destroyed')
 }
 
-// Helpers
-
+/** Download an image and return its base64-encoded data, or null if it fails/exceeds 4 MB. */
 async function downloadImage(url: string): Promise<{ data: string; mimeType: string } | null> {
   try {
     const response = await fetch(url)
@@ -209,6 +218,7 @@ async function downloadImage(url: string): Promise<{ data: string; mimeType: str
   }
 }
 
+/** Get the current hour (0-23) in the configured timezone, or system time as fallback. */
 function getLocalHour(): number {
   const tz = config.timezone
   if (!tz) return new Date().getHours()
@@ -233,7 +243,7 @@ function getRandomFallback(): string {
   return fallbacks[Math.floor(Math.random() * fallbacks.length)]
 }
 
-// Convert ADK session events to WindowMessages for tone detection
+/** Convert ADK session events to WindowMessages for tone detection. */
 function eventsToWindowMessages(events: any[]): WindowMessage[] {
   return events
     .filter((e) => e.content?.parts?.some((p: Part) => p.text && !p.thought))
@@ -248,8 +258,11 @@ function eventsToWindowMessages(events: any[]): WindowMessage[] {
     }))
 }
 
-// Main entry point
-
+/**
+ * Generate an in-character response using the ADK agent pipeline.
+ * @param options - Channel ID, user message, display name, and optional image attachments
+ * @returns Response text and detected tone
+ */
 export async function generateResponse(options: GenerateOptions): Promise<GenerateResult> {
   const { channelId, userMessage, displayName, imageAttachments } = options
 

@@ -1,3 +1,8 @@
+/**
+ * ADK FunctionTool definitions for the Roka agent.
+ * Each tool wraps a pure function with a Zod schema for parameter validation.
+ */
+
 import { FunctionTool } from '@google/adk'
 import { z } from 'zod'
 import { rollDice } from './rollDice.js'
@@ -15,8 +20,6 @@ export type { SearchAnimeParams } from './searchAnime.js'
 export type { GetAnimeScheduleParams } from './getAnimeSchedule.js'
 export type { GetWeatherParams } from './getWeather.js'
 export type { SearchWebParams } from './searchWeb.js'
-
-// ADK FunctionTool definitions with Zod schemas.
 
 export const rollDiceTool = new FunctionTool({
   name: 'roll_dice',
@@ -115,7 +118,7 @@ export const searchWebTool = new FunctionTool({
   execute: async (input) => await searchWeb(input)
 })
 
-// All ADK FunctionTool instances for use with LlmAgent.
+/** All tool instances registered with the Roka LlmAgent. */
 export const rokaTools = [
   rollDiceTool,
   flipCoinTool,

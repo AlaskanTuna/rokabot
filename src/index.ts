@@ -15,6 +15,7 @@ import { destroyAllSessions } from './agent/roka.js'
 
 const client = createClient()
 
+/** Tear down ADK sessions and disconnect Discord before exiting. */
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'Shutdown signal received')
 
@@ -23,6 +24,7 @@ async function shutdown(signal: string): Promise<void> {
 
   logger.info('Roka is going to sleep. Oyasumi~')
 
+  // Force-exit safety net if graceful shutdown stalls
   const timeout = setTimeout(() => {
     logger.warn('Graceful shutdown timed out, forcing exit')
     process.exit(1)

@@ -1,9 +1,12 @@
+/**
+ * Configuration loader — merges secrets from .env with tunables from config.yml.
+ * Env-var overrides take precedence over YAML values for backward compatibility.
+ */
+
 import 'dotenv/config'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { load } from 'js-yaml'
-
-// 1. Load secrets from environment
 
 function requiredEnv(key: string): string {
   const value = process.env[key]
@@ -12,8 +15,6 @@ function requiredEnv(key: string): string {
   }
   return value
 }
-
-// 2. Load tunables from config.yml
 
 interface YamlConfig {
   gemini?: { model?: string; timeout?: number; maxRetries?: number; maxOutputTokens?: number }
@@ -42,7 +43,7 @@ function loadYamlConfig(): YamlConfig {
 
 const yaml = loadYamlConfig()
 
-// 3. Env-var overrides (backward compat)
+// Env-var override helpers (backward compat)
 
 function envInt(key: string): number | undefined {
   const raw = process.env[key]
@@ -58,8 +59,7 @@ function envString(key: string): string | undefined {
   return process.env[key] || undefined
 }
 
-// 4. Merged config object
-
+/** Merged config: env overrides > config.yml > hardcoded defaults. */
 export const config = {
   discord: {
     token: requiredEnv('DISCORD_TOKEN'),

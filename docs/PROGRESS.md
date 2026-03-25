@@ -6,6 +6,26 @@
 
 <!-- Record latest from here onwards. -->
 
+## [25/03/26] - Codebase Comment & Docstring Cleanup
+
+- Added JSDoc docstrings to all exported functions and key internal helpers across `src/` and `scripts/`.
+- Added module-level doc comments to major files (config, roka agent, tools, session manager, etc.).
+- Removed redundant section-header comments that restated the obvious.
+- Kept comments focused on WHY, not WHAT; no docstrings added to trivial/obvious functions or test files.
+- All 113 tests pass; Prettier reports no formatting changes needed.
+
+---
+
+## [25/03/26] - README.md Update
+
+- Rewrote README.md to reflect current system state: ADK-based architecture, all 7 tools, updated config table with new fields (maxOutputTokens, timezone), all npm scripts (dev:quiet, test:smoke).
+- Added new collapsible sub-diagrams: Tool Calling Flow, Prompt Assembly, Session Management.
+- Added Features section with comprehensive feature list.
+- Removed Hardware/Software requirements tables (moved essentials to Prerequisites). Consolidated Installation/Run into Getting Started section.
+- Updated all diagrams to reflect ADK Runner-based architecture.
+
+---
+
 ## [25/03/26] - Tool Defaults, Response Length & DX Fixes
 
 - `getWeather` now defaults to configured timezone location when no city is specified.

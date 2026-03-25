@@ -1,3 +1,5 @@
+/** /chat slash command — the primary way users talk with Roka. */
+
 import { SlashCommandBuilder } from 'discord.js'
 
 export const chatCommand = new SlashCommandBuilder()

@@ -7,7 +7,7 @@ import { buildRokaMessage } from '../messageBuilder.js'
 import { generateResponse, type ImageAttachment } from '../../agent/roka.js'
 import { isChannelBusy, markBusy, markFree } from '../concurrency.js'
 
-// Components V2 type constants (TextDisplay=10, Section=9, Container=17)
+// Discord Components V2 type discriminants
 const TEXT_DISPLAY = 10
 const SECTION = 9
 const CONTAINER = 17
@@ -52,6 +52,7 @@ function extractComponentTexts(components: Message['components']): string[] {
   return texts
 }
 
+/** Create a handler for mention/reply message triggers that invokes the Roka agent. */
 export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
   return async function handleMessageCreate(message: Message): Promise<void> {
     if (message.author.bot) return
@@ -73,7 +74,6 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
 
     let content = message.content.replace(/<@!?\d+>/g, '').trim()
 
-    // Extract image attachments (max 3, image types only)
     const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp'])
     const MAX_IMAGE_ATTACHMENTS = 3
     const imageAttachments: ImageAttachment[] = message.attachments
@@ -81,16 +81,15 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
       .map((a) => ({ url: a.url, contentType: a.contentType! }))
       .slice(0, MAX_IMAGE_ATTACHMENTS)
 
-    // If replying to another message (not the bot), include referenced content as context
+    // Include referenced message content as context so Roka can see what the user is replying to
     if (referencedMessage && !isReplyToBot) {
       const refAuthor = referencedMessage.member?.displayName ?? referencedMessage.author.displayName
       const refContent = referencedMessage.content?.trim()
 
-      // Build context prefix from the referenced message
       const refParts: string[] = []
       if (refContent) refParts.push(refContent)
 
-      // Extract text from embeds (link previews, Twitter/X, YouTube, bot embeds, etc.)
+      // Pull text from embeds (link previews, social cards, bot embeds, etc.)
       for (const embed of referencedMessage.embeds) {
         const embedParts: string[] = []
         if (embed.author?.name) embedParts.push(`Author: ${embed.author.name}`)
@@ -105,7 +104,7 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
         }
       }
 
-      // Extract text from Components V2 containers (other bots using container messages)
+      // Pull text from Components V2 containers (other bots using container messages)
       if (referencedMessage.components.length > 0) {
         const componentTexts = extractComponentTexts(referencedMessage.components)
         if (componentTexts.length > 0) {
@@ -120,7 +119,7 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
         content = content ? `${refContext}\n${content}` : refContext
       }
 
-      // Grab images from the referenced message — attachments first
+      // Forward images from the referenced message so Roka can see them
       const refImages: ImageAttachment[] = referencedMessage.attachments
         .filter((a) => a.contentType !== null && ALLOWED_IMAGE_TYPES.has(a.contentType))
         .map((a) => ({ url: a.url, contentType: a.contentType! }))
@@ -128,7 +127,7 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
 
       imageAttachments.push(...refImages)
 
-      // Also grab images from embeds (link preview images, Twitter images, etc.)
+      // Also grab images from embed thumbnails (link preview images, social cards, etc.)
       if (imageAttachments.length < MAX_IMAGE_ATTACHMENTS) {
         for (const embed of referencedMessage.embeds) {
           if (imageAttachments.length >= MAX_IMAGE_ATTACHMENTS) break

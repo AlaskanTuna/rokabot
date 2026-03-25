@@ -54,6 +54,7 @@ export function getRandomEmptyMention(): string {
 
 /**
  * Split long responses to fit within Discord's message character limit.
+ * Prefers splitting at newlines, then spaces, to avoid mid-word breaks.
  */
 export function splitResponse(text: string, maxLength = config.discord.maxMessageLength): string[] {
   if (text.length <= maxLength) return [text]

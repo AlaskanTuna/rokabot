@@ -1,3 +1,5 @@
+/** Web search via the Tavily API — used as a fallback when specialized tools cannot answer. */
+
 import { config } from '../../config.js'
 import { logger } from '../../utils/logger.js'
 
@@ -20,6 +22,7 @@ interface TavilyResponse {
   response_time: number
 }
 
+/** Search the web via Tavily and return an AI-generated summary plus top results. */
 export async function searchWeb(
   params: SearchWebParams
 ): Promise<{ answer: string; results: { title: string; url: string; snippet: string }[]; resultCount: number }> {
