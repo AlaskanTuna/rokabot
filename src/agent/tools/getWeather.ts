@@ -1,7 +1,8 @@
+import { config } from '../../config.js'
 import { logger } from '../../utils/logger.js'
 
 export interface GetWeatherParams {
-  city: string
+  city?: string
 }
 
 export interface GetWeatherResult {
@@ -71,7 +72,10 @@ function weatherCodeToCondition(code: number): string {
 }
 
 export async function getWeather(params: GetWeatherParams): Promise<GetWeatherResult> {
-  const city = params.city.trim()
+  let city = params.city?.trim() ?? ''
+  if (!city) {
+    city = config.timezone?.split('/').pop()?.replace(/_/g, ' ') ?? ''
+  }
   if (!city) {
     return {
       city: '',

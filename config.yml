@@ -6,7 +6,7 @@ gemini:
   model: gemini-3.1-flash-lite-preview
   timeout: 25000 # ms, request timeout
   maxRetries: 1 # max retry attempts for transient errors
-  maxOutputTokens: 350 # max tokens for Gemini response (~1200 chars); min 300 to avoid cutoff.
+  maxOutputTokens: 500 # max tokens for Gemini response; set high to avoid cutoff — word count controlled via prompt.
 
 rateLimit:
   rpm: 15 # requests per minute

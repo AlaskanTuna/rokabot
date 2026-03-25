@@ -6,6 +6,15 @@
 
 <!-- Record latest from here onwards. -->
 
+## [25/03/26] - Tool Defaults, Response Length & DX Fixes
+
+- `getWeather` now defaults to configured timezone location when no city is specified.
+- Fixed `npm run dev:quiet` — was intercepting `console.log` but ADK uses `console.info`; also fixed arg matching for event filtering.
+- Response length now controlled via prompt instruction (80-100 words, 100 hard limit) instead of `maxOutputTokens` which caused mid-sentence cutoff. Raised `maxOutputTokens` to 500 as safety net.
+- 113 unit tests pass; TypeScript compiles cleanly.
+
+---
+
 ## [25/03/26] - ADK Bug Fixes & DX Improvements
 
 - Fixed session corruption bug: ErrorRecoveryPlugin fallback responses were creating invalid function call sequences in ADK session history, causing 400 INVALID_ARGUMENT on subsequent requests. Session is now destroyed on fallback to prevent corruption.
