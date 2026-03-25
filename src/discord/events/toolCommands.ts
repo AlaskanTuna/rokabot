@@ -36,11 +36,7 @@ const FLAVOR = {
     'I wonder what the weather is like there~',
     "Let's see~ checking the forecast!"
   ],
-  search: [
-    'Let me look that up for you~',
-    'Hmm, good question! Let me check~',
-    "One moment~ I'll search for that!"
-  ]
+  search: ['Let me look that up for you~', 'Hmm, good question! Let me check~', "One moment~ I'll search for that!"]
 }
 
 // ERROR CONSTANTS

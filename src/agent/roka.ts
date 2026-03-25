@@ -29,6 +29,9 @@ export interface GenerateResult {
 const MAX_IMAGE_SIZE_BYTES = 4 * 1024 * 1024
 const APP_NAME = 'rokabot'
 
+// Tracks tool calls within a single generateResponse invocation; reset per request
+let toolCallsThisRequest: string[] = []
+
 // Extends InMemorySessionService to cap event history per getSession call
 class WindowedSessionService extends InMemorySessionService {
   constructor(private maxEvents: number) {
@@ -85,6 +88,7 @@ const rokaAgent = new LlmAgent({
   },
   beforeToolCallback: async ({ tool, args }) => {
     logger.info({ tool: tool.name, args }, 'Tool call requested')
+    toolCallsThisRequest.push(tool.name)
     return undefined
   }
 })
@@ -217,13 +221,15 @@ function getLocalHour(): number {
   }
 }
 
+const KNOWN_FALLBACKS = new Set([
+  'Hmm? Sorry, I spaced out for a moment there~',
+  'Ah, what was that? I got distracted by something.',
+  'Ahaha, my mind wandered. Say that again?',
+  "I wasn't paying attention... don't tell anyone, okay?"
+])
+
 function getRandomFallback(): string {
-  const fallbacks = [
-    'Hmm? Sorry, I spaced out for a moment there~',
-    'Ah, what was that? I got distracted by something.',
-    'Ahaha, my mind wandered. Say that again?',
-    "I wasn't paying attention... don't tell anyone, okay?"
-  ]
+  const fallbacks = [...KNOWN_FALLBACKS]
   return fallbacks[Math.floor(Math.random() * fallbacks.length)]
 }
 
@@ -246,6 +252,8 @@ function eventsToWindowMessages(events: any[]): WindowMessage[] {
 
 export async function generateResponse(options: GenerateOptions): Promise<GenerateResult> {
   const { channelId, userMessage, displayName, imageAttachments } = options
+
+  toolCallsThisRequest = []
 
   const session = await ensureSession(channelId)
   resetIdleTimer(channelId)
@@ -322,11 +330,22 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
       responseText = getRandomFallback()
     }
 
+    // Destroy session if a fallback response was returned to prevent corrupted history
+    // (e.g. ErrorRecoveryPlugin injecting model text after a functionCall turn)
+    if (KNOWN_FALLBACKS.has(responseText)) {
+      logger.warn({ channelId }, 'Fallback response detected, destroying session to prevent history corruption')
+      await destroySession(channelId)
+    }
+
+    // Log tool fallback chains when multiple tools were called in a single request
+    if (toolCallsThisRequest.length > 1) {
+      logger.info({ tools: toolCallsThisRequest }, 'Tool fallback chain detected')
+    }
+
     logger.debug({ responseLength: responseText.length }, 'ADK response extracted')
     return { text: responseText, tone }
   } catch (error) {
-    const errDetail =
-      error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error
+    const errDetail = error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error
     logger.error({ error: errDetail, channelId }, 'ADK request failed')
 
     // If session is corrupted or too large, destroy it so the next request starts fresh.

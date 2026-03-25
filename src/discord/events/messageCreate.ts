@@ -170,6 +170,12 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
     if ('sendTyping' in message.channel) {
       await message.channel.sendTyping()
     }
+    const typingInterval =
+      'sendTyping' in message.channel
+        ? setInterval(() => {
+            ;(message.channel as { sendTyping: () => Promise<void> }).sendTyping().catch(() => {})
+          }, 7000)
+        : null
 
     markBusy(channelId)
     try {
@@ -212,6 +218,7 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
         }
       }
     } finally {
+      if (typingInterval) clearInterval(typingInterval)
       markFree(channelId)
     }
   }

@@ -1,3 +1,13 @@
+// Suppress verbose ADK event dumps when ADK_QUIET is set (must run before any imports)
+if (process.env.ADK_QUIET) {
+  const originalLog = console.log
+  console.log = (...args: unknown[]) => {
+    const first = typeof args[0] === 'string' ? args[0] : ''
+    if (first.includes('[ADK INFO]') && first.includes('event:')) return
+    originalLog(...args)
+  }
+}
+
 import { config } from './config.js'
 import { logger } from './utils/logger.js'
 import { createClient } from './discord/client.js'

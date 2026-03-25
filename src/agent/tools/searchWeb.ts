@@ -1,3 +1,4 @@
+import { config } from '../../config.js'
 import { logger } from '../../utils/logger.js'
 
 export interface SearchWebParams {
@@ -29,6 +30,9 @@ export async function searchWeb(
 
   const { query, topic = 'general', max_results = 5 } = params
   const today = new Date().toISOString().split('T')[0]
+  const tz = config.timezone
+  const location = tz ? tz.split('/').pop()?.replace(/_/g, ' ') : null
+  const context = location ? `(as of ${today}, ${location})` : `(as of ${today})`
 
   try {
     const response = await fetch('https://api.tavily.com/search', {
@@ -38,7 +42,7 @@ export async function searchWeb(
         Authorization: `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        query: `${query} (as of ${today})`,
+        query: `${query} ${context}`,
         topic,
         max_results,
         include_answer: 'basic'

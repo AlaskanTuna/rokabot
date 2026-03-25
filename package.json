@@ -6,6 +6,7 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "LOG_LEVEL=debug tsx watch src/index.ts",
+    "dev:quiet": "LOG_LEVEL=debug ADK_QUIET=1 tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "lint": "eslint src/",
