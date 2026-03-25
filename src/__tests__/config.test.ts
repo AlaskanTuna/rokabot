@@ -61,14 +61,14 @@ describe('config module', () => {
     const { config } = await import('../config.js')
 
     expect(config.gemini.model).toBe('gemini-3.1-flash-lite-preview')
-    expect(config.gemini.timeout).toBe(15_000)
+    expect(config.gemini.timeout).toBe(25_000)
     expect(config.gemini.maxRetries).toBe(1)
     expect(config.logging.level).toBe('info')
     expect(config.rateLimit.rpm).toBe(15)
     expect(config.rateLimit.rpd).toBe(500)
     expect(config.session.ttlMs).toBe(300_000)
     expect(config.session.windowSize).toBe(10)
-    expect(config.discord.maxMessageLength).toBe(1000)
+    expect(config.discord.maxMessageLength).toBe(1500)
   })
 
   it('env vars override config.yml values', async () => {

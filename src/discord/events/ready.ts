@@ -4,6 +4,7 @@ import { logger } from '../../utils/logger.js'
 import { chatCommand } from '../commands/chat.js'
 import { toolCommands } from '../commands/tools.js'
 
+/** Set presence, register slash commands, and log startup on Discord ready. */
 export async function handleReady(client: Client): Promise<void> {
   logger.info({ user: client.user?.tag }, 'Roka is online!')
 

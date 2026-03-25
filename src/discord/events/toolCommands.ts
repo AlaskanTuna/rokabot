@@ -1,3 +1,9 @@
+/**
+ * Slash command handlers for direct tool invocations (bypass the LLM).
+ * Each handler calls the underlying tool function and formats the result
+ * into a Components V2 container message with in-character flavor text.
+ */
+
 import type { ChatInputCommandInteraction } from 'discord.js'
 import { ActionRowBuilder, ButtonBuilder, ContainerBuilder, TextDisplayBuilder } from '@discordjs/builders'
 import { ButtonStyle, ComponentType, MessageFlags } from 'discord.js'
@@ -8,12 +14,12 @@ import { getCurrentTime } from '../../agent/tools/getCurrentTime.js'
 import { getWeather } from '../../agent/tools/getWeather.js'
 import { searchAnime, type SearchAnimeParams } from '../../agent/tools/searchAnime.js'
 import { getAnimeSchedule } from '../../agent/tools/getAnimeSchedule.js'
+import { searchWeb } from '../../agent/tools/searchWeb.js'
 
-// COLOR CONSTANTS
 const PLAYFUL_COLOR = 0xffb3d9
 const CURIOUS_COLOR = 0xb2ebf2
 
-// FLAVOR CONSTANTS
+// In-character flavor lines prepended to each tool response
 const FLAVOR = {
   roll_dice: [
     'Fufu~ let me see what fate has in store~',
@@ -34,10 +40,10 @@ const FLAVOR = {
     'Hmm, let me check the weather for you~',
     'I wonder what the weather is like there~',
     "Let's see~ checking the forecast!"
-  ]
+  ],
+  search: ['Let me look that up for you~', 'Hmm, good question! Let me check~', "One moment~ I'll search for that!"]
 }
 
-// ERROR CONSTANTS
 const ERROR_MESSAGES = [
   'Nn... something went wrong. Maybe try again later?',
   "Ah, that didn't work... sorry about that~",
@@ -48,6 +54,7 @@ function randomFrom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]
 }
 
+/** Wrap text in a colored Components V2 container for consistent tool output styling. */
 function buildToolMessage(text: string, color: number) {
   const container = new ContainerBuilder()
     .setAccentColor(color)
@@ -59,7 +66,6 @@ function buildToolMessage(text: string, color: number) {
   }
 }
 
-// Tool: Roll Dice
 function handleRollDice(interaction: ChatInputCommandInteraction) {
   const sides = interaction.options.getInteger('sides') ?? 6
   const count = interaction.options.getInteger('count') ?? 1
@@ -78,7 +84,6 @@ function handleRollDice(interaction: ChatInputCommandInteraction) {
   return buildToolMessage(text, PLAYFUL_COLOR)
 }
 
-// Tool: Flip Coin
 function handleFlipCoin() {
   const result = Math.random() < 0.5 ? 'Heads' : 'Tails'
   const flavor = randomFrom(FLAVOR.flip_coin)
@@ -86,7 +91,6 @@ function handleFlipCoin() {
   return buildToolMessage(text, PLAYFUL_COLOR)
 }
 
-// Tool: Time
 function handleTime(interaction: ChatInputCommandInteraction) {
   const location = interaction.options.getString('location', true)
   const format = (interaction.options.getString('format') ?? '24h') as '12h' | '24h'
@@ -98,7 +102,6 @@ function handleTime(interaction: ChatInputCommandInteraction) {
   return buildToolMessage(text, CURIOUS_COLOR)
 }
 
-// Tool: Anime (via searchAnime tool)
 async function handleAnime(interaction: ChatInputCommandInteraction) {
   const query = interaction.options.getString('query', true)
   const sortBy = (interaction.options.getString('sort_by') ?? undefined) as SearchAnimeParams['sort_by']
@@ -135,12 +138,11 @@ async function handleAnime(interaction: ChatInputCommandInteraction) {
     return `${flavor}\n\n${lines.join('\n\n')}\n${footer}`
   }
 
-  // Single page — no buttons
   if (totalPages <= 1) {
     return buildToolMessage(buildAnimePage(0), CURIOUS_COLOR)
   }
 
-  // Multi-page — pagination buttons
+  // Multi-page — attach pagination buttons with a 60s collector
   let currentPage = 0
 
   const buildPageContainer = (page: number, buttonsEnabled: boolean) => {
@@ -203,7 +205,6 @@ async function handleAnime(interaction: ChatInputCommandInteraction) {
   return undefined as unknown as ReturnType<typeof buildToolMessage>
 }
 
-// Tool: Schedule (via getAnimeSchedule tool)
 async function handleSchedule(interaction: ChatInputCommandInteraction) {
   const scope = (interaction.options.getString('scope') ?? 'day') as 'day' | 'week' | 'season'
   const day = interaction.options.getString('day') ?? undefined
@@ -250,7 +251,6 @@ async function handleSchedule(interaction: ChatInputCommandInteraction) {
     return buildToolMessage(lines.join('\n'), CURIOUS_COLOR)
   }
 
-  // List results (day/week/season) with pagination
   const sortLabel = sortBy ? `sorted by ${sortBy}` : 'sorted by score'
   const header = `\uD83D\uDCC5 **${result.label}** (${sortLabel})`
   const pageSize = 5
@@ -276,12 +276,10 @@ async function handleSchedule(interaction: ChatInputCommandInteraction) {
     return `${flavor}\n\n${header}\n\n${lines.join('\n')}\n${footer}`
   }
 
-  // Single page — no buttons needed
   if (totalPages <= 1) {
     return buildToolMessage(buildPage(0), CURIOUS_COLOR)
   }
 
-  // Multi-page — add pagination buttons
   let currentPage = 0
   const initialText = buildPage(currentPage)
   const container = new ContainerBuilder()
@@ -303,7 +301,6 @@ async function handleSchedule(interaction: ChatInputCommandInteraction) {
     flags: MessageFlags.IsComponentsV2 as typeof MessageFlags.IsComponentsV2
   })
 
-  // Collector for button interactions (60s timeout)
   const collector = reply.createMessageComponentCollector({
     componentType: ComponentType.Button,
     time: 60_000
@@ -346,7 +343,6 @@ async function handleSchedule(interaction: ChatInputCommandInteraction) {
   })
 
   collector.on('end', async () => {
-    // Disable buttons after timeout
     const disabledContainer = new ContainerBuilder()
       .setAccentColor(CURIOUS_COLOR)
       .addTextDisplayComponents(new TextDisplayBuilder().setContent(buildPage(currentPage)))
@@ -373,7 +369,6 @@ async function handleSchedule(interaction: ChatInputCommandInteraction) {
       .catch(() => {})
   })
 
-  // Return value not used since we already edited the reply
   return undefined as unknown as ReturnType<typeof buildToolMessage>
 }
 
@@ -400,7 +395,6 @@ function formatTimezoneShort(tz: Record<string, string>): string {
   return parts.join(' | ')
 }
 
-// Tool: Weather (Open-Meteo API via getWeather tool)
 async function handleWeather(interaction: ChatInputCommandInteraction) {
   const city = interaction.options.getString('city', true)
   const flavor = randomFrom(FLAVOR.weather)
@@ -422,9 +416,9 @@ async function handleWeather(interaction: ChatInputCommandInteraction) {
   return buildToolMessage(text, CURIOUS_COLOR)
 }
 
-// Handler
-const TOOL_COMMAND_NAMES = new Set(['roll_dice', 'flip_coin', 'time', 'anime', 'schedule', 'weather'])
+const TOOL_COMMAND_NAMES = new Set(['roll_dice', 'flip_coin', 'time', 'anime', 'schedule', 'weather', 'search'])
 
+/** Create a dispatcher that routes tool slash commands to their respective handlers. */
 export function createToolCommandHandler(rateLimiter: RateLimiter) {
   return async function handleToolCommand(interaction: ChatInputCommandInteraction): Promise<void> {
     const commandName = interaction.commandName
@@ -474,6 +468,26 @@ export function createToolCommandHandler(rateLimiter: RateLimiter) {
           await interaction.deferReply()
           const payload = await handleWeather(interaction)
           await interaction.editReply(payload)
+          break
+        }
+        case 'search': {
+          await interaction.deferReply()
+          const query = interaction.options.getString('query', true)
+          const flavor = randomFrom(FLAVOR.search)
+          const result = await searchWeb({ query })
+          const lines = [flavor, '', `🔍 **${query}**`]
+          if (result.answer && result.answer !== 'No summary available.') {
+            lines.push('', result.answer)
+          }
+          if (result.results.length > 0) {
+            lines.push('')
+            for (const r of result.results.slice(0, 3)) {
+              lines.push(`[\u2197 ${r.title}](${r.url})`)
+            }
+          } else if (!result.answer || result.answer === 'No summary available.') {
+            lines.push('', "Hmm, I couldn't find anything for that~ Maybe try a different query?")
+          }
+          await interaction.editReply(buildToolMessage(lines.join('\n'), CURIOUS_COLOR))
           break
         }
       }

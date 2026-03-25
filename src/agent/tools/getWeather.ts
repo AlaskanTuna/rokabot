@@ -1,7 +1,10 @@
+/** Weather lookups via Open-Meteo geocoding + forecast APIs (no API key required). */
+
+import { config } from '../../config.js'
 import { logger } from '../../utils/logger.js'
 
 export interface GetWeatherParams {
-  city: string
+  city?: string
 }
 
 export interface GetWeatherResult {
@@ -35,6 +38,7 @@ interface OpenMeteoWeather {
   }
 }
 
+// WMO weather interpretation codes → human-readable descriptions
 const wmoWeatherCodes: Record<number, string> = {
   0: 'Clear sky',
   1: 'Mainly clear',
@@ -70,8 +74,13 @@ function weatherCodeToCondition(code: number): string {
   return wmoWeatherCodes[code] ?? 'Unknown'
 }
 
+/** Geocode a city name and fetch current weather conditions from Open-Meteo. */
 export async function getWeather(params: GetWeatherParams): Promise<GetWeatherResult> {
-  const city = params.city.trim()
+  // Fall back to the city implied by the configured timezone
+  let city = params.city?.trim() ?? ''
+  if (!city) {
+    city = config.timezone?.split('/').pop()?.replace(/_/g, ' ') ?? ''
+  }
   if (!city) {
     return {
       city: '',

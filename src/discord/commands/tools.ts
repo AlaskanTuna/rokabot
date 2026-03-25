@@ -1,3 +1,5 @@
+/** Slash command definitions for direct tool invocations (dice, coin, time, anime, weather, search). */
+
 import { SlashCommandBuilder } from 'discord.js'
 
 export const rollDiceCommand = new SlashCommandBuilder()
@@ -143,11 +145,17 @@ export const weatherCommand = new SlashCommandBuilder()
   .setDescription('Check the weather!')
   .addStringOption((opt) => opt.setName('city').setDescription('City name (e.g. Tokyo, London)').setRequired(true))
 
+export const searchCommand = new SlashCommandBuilder()
+  .setName('search')
+  .setDescription('Search the web for current info!')
+  .addStringOption((opt) => opt.setName('query').setDescription('What to search for').setRequired(true))
+
 export const toolCommands = [
   rollDiceCommand,
   flipCoinCommand,
   timeCommand,
   animeCommand,
   scheduleCommand,
-  weatherCommand
+  weatherCommand,
+  searchCommand
 ]

@@ -6,6 +6,7 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "LOG_LEVEL=debug tsx watch src/index.ts",
+    "dev:quiet": "LOG_LEVEL=debug ADK_QUIET=1 tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "lint": "eslint src/",
@@ -13,7 +14,8 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:chat": "tsx scripts/test-chat.ts"
+    "test:chat": "tsx scripts/test-chat.ts",
+    "test:smoke": "tsx scripts/test-adk-smoke.ts"
   },
   "dependencies": {
     "@google/adk": "^0.1.0",
@@ -21,7 +23,8 @@
     "discord.js": "^14.18.0",
     "dotenv": "^16.5.0",
     "js-yaml": "^4.1.1",
-    "pino": "^9.6.0"
+    "pino": "^9.6.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",

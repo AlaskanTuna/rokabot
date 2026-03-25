@@ -1,8 +1,11 @@
+/**
+ * Anime schedule lookups via the Jikan (MyAnimeList) API.
+ * Supports day, week, season scopes and specific anime broadcast lookups.
+ */
+
 import { config } from '../../config.js'
 import { logger } from '../../utils/logger.js'
 import { jikanThrottle } from './jikanThrottle.js'
-
-// Interfaces
 
 export interface GetAnimeScheduleParams {
   scope: 'day' | 'week' | 'season'
@@ -36,8 +39,6 @@ export interface GetAnimeScheduleResult {
   total: number
 }
 
-// Jikan response types
-
 interface JikanAnimeEntry {
   title?: string
   title_japanese?: string | null
@@ -67,10 +68,9 @@ interface JikanResponse {
   }
 }
 
-// Constants
-
 const VALID_DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const
 
+// Timezones shown alongside JST broadcast times
 const BROADCAST_TIMEZONES: Record<string, string> = {
   JST: 'Asia/Tokyo',
   EST: 'America/New_York',
@@ -78,8 +78,6 @@ const BROADCAST_TIMEZONES: Record<string, string> = {
   CET: 'Europe/Berlin',
   SGT: 'Asia/Singapore'
 }
-
-// Helpers
 
 function getTodayName(): string {
   const tz = config.timezone ?? 'UTC'
@@ -98,6 +96,7 @@ function getCurrentSeason(): { season: string; year: number } {
   return { season: 'fall', year }
 }
 
+/** Convert a JST broadcast time (HH:MM) to multiple timezone equivalents. */
 function convertBroadcastTime(time: string | null): Record<string, string> | null {
   if (!time) return null
 
@@ -181,8 +180,7 @@ function clampLimit(limit: number | undefined): number {
   return Math.max(1, Math.min(25, limit))
 }
 
-// Fetch helpers
-
+/** Fetch from Jikan API with rate-limit throttling. */
 async function fetchJikan(url: string): Promise<JikanResponse | null> {
   try {
     await jikanThrottle()
@@ -199,8 +197,6 @@ async function fetchJikan(url: string): Promise<JikanResponse | null> {
     return null
   }
 }
-
-// Scope handlers
 
 async function handleAnimeLookup(anime: string): Promise<GetAnimeScheduleResult> {
   const url = `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(anime)}&limit=1&sfw=true`
@@ -264,8 +260,10 @@ async function handleSeason(sortBy: string, limit: number): Promise<GetAnimeSche
   return { scope: 'season', label, entries, total }
 }
 
-// Main export
-
+/**
+ * Fetch anime airing schedule by scope (day/week/season) or specific anime name.
+ * @returns Schedule entries sorted and limited per params
+ */
 export async function getAnimeSchedule(params: GetAnimeScheduleParams): Promise<GetAnimeScheduleResult> {
   const { scope, day, sort_by = 'score', anime } = params
   const limit = clampLimit(params.limit)

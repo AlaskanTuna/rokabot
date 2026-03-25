@@ -1,14 +1,14 @@
-import type { ChatInputCommandInteraction, Interaction } from 'discord.js'
+import type { Interaction } from 'discord.js'
 import { DiscordAPIError } from 'discord.js'
 import { logger } from '../../utils/logger.js'
 import { RateLimiter } from '../../utils/rateLimiter.js'
 import { getRandomBusy, getRandomDecline, getRandomError, splitResponse } from '../responses.js'
 import { buildRokaMessage } from '../messageBuilder.js'
-import { addMessage, getHistory, getOrCreateSession } from '../../session/sessionManager.js'
 import { generateResponse, type ImageAttachment } from '../../agent/roka.js'
 import { isChannelBusy, markBusy, markFree } from '../concurrency.js'
 import { createToolCommandHandler } from './toolCommands.js'
 
+/** Create a handler for all slash command interactions (chat + tool commands). */
 export function createInteractionHandler(rateLimiter: RateLimiter) {
   const handleToolCommand = createToolCommandHandler(rateLimiter)
 
@@ -26,7 +26,6 @@ export function createInteractionHandler(rateLimiter: RateLimiter) {
     const member = interaction.member
     const displayName = member && 'displayName' in member ? member.displayName : interaction.user.displayName
 
-    // Extract image attachment if provided and it has a valid image content type
     const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp'])
     const imageAttachments: ImageAttachment[] = []
     if (attachment?.contentType && ALLOWED_IMAGE_TYPES.has(attachment.contentType)) {
@@ -42,13 +41,15 @@ export function createInteractionHandler(rateLimiter: RateLimiter) {
         'Rate limit hit — declining'
       )
 
-      await interaction.reply({ content: getRandomDecline() })
+      const declineReply = await interaction.reply({ content: getRandomDecline(), fetchReply: true })
+      setTimeout(() => declineReply.delete().catch(() => {}), 5000)
       return
     }
 
     if (isChannelBusy(channelId)) {
       logger.debug({ channelId }, 'Channel busy — sending busy message')
-      await interaction.reply({ content: getRandomBusy() })
+      const busyReply = await interaction.reply({ content: getRandomBusy(), fetchReply: true })
+      setTimeout(() => busyReply.delete().catch(() => {}), 5000)
       return
     }
 
@@ -56,36 +57,14 @@ export function createInteractionHandler(rateLimiter: RateLimiter) {
 
     markBusy(channelId)
     try {
-      getOrCreateSession(channelId)
-
-      addMessage(channelId, {
-        role: 'user',
-        displayName,
-        content: message,
-        timestamp: Date.now()
-      })
-
-      const history = getHistory(channelId)
-      const participants = [...new Set(history.map((m) => m.displayName))]
-
-      logger.debug({ channelId, historySize: history.length, participants }, 'Calling Gemini')
-
       const { text: responseText, tone } = await generateResponse({
+        channelId,
         userMessage: message,
         displayName,
-        channelHistory: history.slice(0, -1),
-        participants,
         imageAttachments: imageAttachments.length > 0 ? imageAttachments : undefined
       })
 
-      addMessage(channelId, {
-        role: 'assistant',
-        displayName: 'Roka',
-        content: responseText,
-        timestamp: Date.now()
-      })
-
-      logger.debug({ channelId, tone, responseLength: responseText.length }, 'Gemini response received')
+      logger.debug({ channelId, tone, responseLength: responseText.length }, 'ADK response received')
 
       const chunks = splitResponse(responseText)
       logger.debug({ channelId, chunkCount: chunks.length }, 'Response split into chunks')

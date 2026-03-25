@@ -176,6 +176,10 @@ const TONE_PATTERNS: ToneRule[] = [
   }
 ]
 
+/**
+ * Scan the last 3 messages for keyword patterns and return the best-matching tone.
+ * @returns Matched tone key, or 'playful' as the default fallback
+ */
 export function detectTone(messages: WindowMessage[]): ToneKey {
   const recentMessages = messages.slice(-3)
   const text = recentMessages.map((m) => m.content).join(' ')
