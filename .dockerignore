@@ -6,11 +6,15 @@ dist
 .vscode
 docs
 assets
+scripts
 *.md
 !package.json
 .env
 .env.*
 !.env.example
+.eslintrc.cjs
+.prettierrc
+vitest.config.ts
 *.log
 tmp
 temp

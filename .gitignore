@@ -163,6 +163,7 @@ temp/
 # Custom
 # ===========
 
+docs/
 *.tsbuildinfo
 settings.local.json
 roka-expressions/
