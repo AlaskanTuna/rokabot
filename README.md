@@ -364,22 +364,36 @@ docker compose logs -f # Tail logs
 
 ## Docker Deployment
 
-The Dockerfile uses a multi-stage build: stage 1 compiles TypeScript with all dev dependencies, stage 2 copies only the compiled output and production dependencies into a slim `node:24-alpine` image.
-
-```bash
-docker compose up -d
-```
+The Dockerfile uses a multi-stage build: stage 1 compiles TypeScript with all dev dependencies, stage 2 copies only the compiled output and production dependencies into a slim `node:24-alpine` image. Builds natively on ARM64 (Raspberry Pi 5) with no cross-compilation needed.
 
 | Setting          | Value             |
 | ---------------- | ----------------- |
 | Base image       | `node:24-alpine`  |
 | Memory limit     | 512 MB            |
-| Expected runtime | ~80-150 MB        |
+| Measured runtime | ~46 MB            |
 | Restart policy   | `unless-stopped`  |
 | Log rotation     | 10 MB x 3 files   |
 | Process user     | `node` (non-root) |
 
-The image builds natively on ARM64 (Raspberry Pi 5) with no cross-compilation needed.
+```bash
+# Build and start (first time or after code changes)
+docker compose up -d --build
+
+# View logs
+docker compose logs -f
+
+# Restart the bot
+docker compose restart
+
+# Stop the bot
+docker compose down
+
+# Check memory/CPU usage
+docker stats --no-stream
+
+# Deploy latest changes from GitHub
+cd ~/rokabot && git pull && docker compose up -d --build
+```
 
 ---
 
