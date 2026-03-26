@@ -13,6 +13,8 @@ RUN npm run build
 # Stage 2: Runtime
 FROM node:24-alpine
 
+ENV NODE_ENV=production
+
 WORKDIR /app
 
 COPY package.json package-lock.json ./
