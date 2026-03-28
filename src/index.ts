@@ -8,12 +8,26 @@ if (process.env.ADK_QUIET) {
   }
 }
 
+import http from 'node:http'
 import { config } from './config.js'
 import { logger } from './utils/logger.js'
 import { createClient } from './discord/client.js'
 import { destroyAllSessions } from './agent/roka.js'
 
 const client = createClient()
+
+// Lightweight health check server for monitoring
+const healthServer = http.createServer((_, res) => {
+  const healthy = client.isReady()
+  res.writeHead(healthy ? 200 : 503, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({
+    status: healthy ? 'ok' : 'unhealthy',
+    uptime: process.uptime(),
+    memory: Math.round(process.memoryUsage().rss / 1024 / 1024),
+    discord: healthy ? 'connected' : 'disconnected',
+  }))
+})
+healthServer.listen(3000, '0.0.0.0')
 
 /** Tear down ADK sessions and disconnect Discord before exiting. */
 async function shutdown(signal: string): Promise<void> {

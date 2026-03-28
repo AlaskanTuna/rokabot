@@ -21,16 +21,33 @@ jobs:
         run: cd ~/rokabot && docker compose up -d --build
 
       - name: Wait for container
-        run: sleep 5
+        run: sleep 8
 
       - name: Health check
+        id: health
         run: |
-          CONTAINER=$(docker compose -f ~/rokabot/docker-compose.yml ps -q)
-          STATE=$(docker inspect --format='{{.State.Status}}' $CONTAINER)
-          if [ "$STATE" != "running" ]; then
-            echo "Container is $STATE, expected running"
+          RESPONSE=$(curl -sf http://localhost:3000/ 2>/dev/null || echo '{"status":"unreachable"}')
+          echo "$RESPONSE" | python3 -m json.tool
+          STATUS=$(echo "$RESPONSE" | python3 -c "import sys,json;print(json.load(sys.stdin).get('status','unknown'))")
+          if [ "$STATUS" != "ok" ]; then
+            echo "Health check failed: $STATUS"
             docker compose -f ~/rokabot/docker-compose.yml logs --tail 20
             exit 1
           fi
-          echo "Container is running"
-          docker stats $CONTAINER --no-stream --format 'Memory: {{.MemUsage}}'
+          echo "Health check passed"
+
+      - name: Notify Discord (success)
+        if: success() && vars.DISCORD_WEBHOOK_URL
+        run: |
+          COMMIT=$(cd ~/rokabot && git log -1 --format='%h %s')
+          curl -sf -H "Content-Type: application/json" \
+            -d "{\"content\":\"**Deploy succeeded** \u2705\n\`$COMMIT\`\"}" \
+            "${{ vars.DISCORD_WEBHOOK_URL }}" > /dev/null
+
+      - name: Notify Discord (failure)
+        if: failure() && vars.DISCORD_WEBHOOK_URL
+        run: |
+          COMMIT=$(cd ~/rokabot && git log -1 --format='%h %s')
+          curl -sf -H "Content-Type: application/json" \
+            -d "{\"content\":\"**Deploy failed** \u274c\n\`$COMMIT\`\nCheck: https://github.com/AlaskanTuna/rokabot/actions\"}" \
+            "${{ vars.DISCORD_WEBHOOK_URL }}" > /dev/null

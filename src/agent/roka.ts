@@ -4,7 +4,8 @@
  */
 
 import { LlmAgent, Runner, InMemorySessionService, isFinalResponse, BasePlugin } from '@google/adk'
-import type { LlmResponse } from '@google/adk'
+import type { LlmResponse, Event } from '@google/adk'
+import type { GetSessionRequest, Session } from '@google/adk'
 import type { Content, Part } from '@google/genai'
 import { logger } from '../utils/logger.js'
 import { assembleSystemPrompt } from './promptAssembler.js'
@@ -43,7 +44,7 @@ class WindowedSessionService extends InMemorySessionService {
     super()
   }
 
-  override async getSession(request: any): Promise<any> {
+  override async getSession(request: GetSessionRequest): Promise<Session | undefined> {
     return super.getSession({
       ...request,
       config: { ...request?.config, numRecentEvents: this.maxEvents }
@@ -244,13 +245,13 @@ function getRandomFallback(): string {
 }
 
 /** Convert ADK session events to WindowMessages for tone detection. */
-function eventsToWindowMessages(events: any[]): WindowMessage[] {
+function eventsToWindowMessages(events: Event[]): WindowMessage[] {
   return events
     .filter((e) => e.content?.parts?.some((p: Part) => p.text && !p.thought))
     .map((e) => ({
       role: (e.author === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
       displayName: '',
-      content: e.content.parts
+      content: (e.content?.parts ?? [])
         .filter((p: Part) => p.text && !p.thought)
         .map((p: Part) => p.text)
         .join(' '),
