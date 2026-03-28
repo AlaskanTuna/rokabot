@@ -3,6 +3,7 @@ import { config } from '../../config.js'
 import { logger } from '../../utils/logger.js'
 import { chatCommand } from '../commands/chat.js'
 import { toolCommands } from '../commands/tools.js'
+import { gameCommands } from '../commands/games.js'
 
 /** Set presence, register slash commands, and log startup on Discord ready. */
 export async function handleReady(client: Client): Promise<void> {
@@ -17,7 +18,7 @@ export async function handleReady(client: Client): Promise<void> {
 
   try {
     await rest.put(Routes.applicationCommands(config.discord.clientId), {
-      body: [chatCommand.toJSON(), ...toolCommands.map((c) => c.toJSON())]
+      body: [chatCommand.toJSON(), ...toolCommands.map((c) => c.toJSON()), ...gameCommands.map((c) => c.toJSON())]
     })
     logger.info('Slash commands registered')
   } catch (error) {

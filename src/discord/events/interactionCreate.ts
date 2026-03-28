@@ -1,4 +1,4 @@
-import type { Interaction } from 'discord.js'
+import type { Client, Interaction } from 'discord.js'
 import { DiscordAPIError } from 'discord.js'
 import { logger } from '../../utils/logger.js'
 import { RateLimiter } from '../../utils/rateLimiter.js'
@@ -7,15 +7,19 @@ import { buildRokaMessage } from '../messageBuilder.js'
 import { generateResponse, type ImageAttachment } from '../../agent/roka.js'
 import { isChannelBusy, markBusy, markFree } from '../concurrency.js'
 import { createToolCommandHandler } from './toolCommands.js'
+import { createGameCommandHandler } from './gameCommands.js'
 
-/** Create a handler for all slash command interactions (chat + tool commands). */
-export function createInteractionHandler(rateLimiter: RateLimiter) {
+/** Create a handler for all slash command interactions (chat + tool + game commands). */
+export function createInteractionHandler(rateLimiter: RateLimiter, client?: Client) {
   const handleToolCommand = createToolCommandHandler(rateLimiter)
+  const handleGameCommand = createGameCommandHandler(client)
 
   return async function handleInteractionCreate(interaction: Interaction): Promise<void> {
     if (!interaction.isChatInputCommand()) return
 
     if (interaction.commandName !== 'chat') {
+      const handled = await handleGameCommand(interaction)
+      if (handled) return
       await handleToolCommand(interaction)
       return
     }

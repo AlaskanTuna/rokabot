@@ -19,7 +19,7 @@ export function createClient(): Client {
   })
 
   client.once('clientReady', () => handleReady(client))
-  client.on('interactionCreate', createInteractionHandler(rateLimiter))
+  client.on('interactionCreate', createInteractionHandler(rateLimiter, client))
   client.on('messageCreate', createMessageHandler(client, rateLimiter))
 
   client.on('error', (error) => {

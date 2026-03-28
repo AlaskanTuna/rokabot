@@ -163,7 +163,7 @@ temp/
 # Custom
 # ===========
 
-data/
+/data/
 docs/
 *.tsbuildinfo
 settings.local.json
