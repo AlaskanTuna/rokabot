@@ -37,17 +37,23 @@ jobs:
           echo "Health check passed"
 
       - name: Notify Discord (success)
-        if: success() && secrets.DISCORD_WEBHOOK_URL
+        if: success()
+        env:
+          WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
+          [ -z "$WEBHOOK_URL" ] && exit 0
           COMMIT=$(cd ~/rokabot && git log -1 --format='%h %s')
           curl -sf -H "Content-Type: application/json" \
             -d "{\"content\":\"**Deploy succeeded** \u2705\n\`$COMMIT\`\"}" \
-            "${{ secrets.DISCORD_WEBHOOK_URL }}" > /dev/null
+            "$WEBHOOK_URL" > /dev/null
 
       - name: Notify Discord (failure)
-        if: failure() && secrets.DISCORD_WEBHOOK_URL
+        if: failure()
+        env:
+          WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
+          [ -z "$WEBHOOK_URL" ] && exit 0
           COMMIT=$(cd ~/rokabot && git log -1 --format='%h %s')
           curl -sf -H "Content-Type: application/json" \
             -d "{\"content\":\"**Deploy failed** \u274c\n\`$COMMIT\`\nCheck: https://github.com/AlaskanTuna/rokabot/actions\"}" \
-            "${{ secrets.DISCORD_WEBHOOK_URL }}" > /dev/null
+            "$WEBHOOK_URL" > /dev/null
