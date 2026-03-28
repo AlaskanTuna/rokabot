@@ -12,14 +12,22 @@ import { searchAnime } from './searchAnime.js'
 import { getAnimeSchedule } from './getAnimeSchedule.js'
 import { getWeather } from './getWeather.js'
 import { searchWeb } from './searchWeb.js'
+import { rememberUser } from './rememberUser.js'
+import { recallUser } from './recallUser.js'
+import { setReminder } from './setReminder.js'
 
 export { rollDice, flipCoin, getCurrentTime, searchAnime, getAnimeSchedule, getWeather, searchWeb }
+export { rememberUser, recallUser }
+export { setReminder }
+export type { SetReminderParams } from './setReminder.js'
 export type { RollDiceParams } from './rollDice.js'
 export type { GetCurrentTimeParams } from './getCurrentTime.js'
 export type { SearchAnimeParams } from './searchAnime.js'
 export type { GetAnimeScheduleParams } from './getAnimeSchedule.js'
 export type { GetWeatherParams } from './getWeather.js'
 export type { SearchWebParams } from './searchWeb.js'
+export type { RememberUserParams } from './rememberUser.js'
+export type { RecallUserParams } from './recallUser.js'
 
 export const rollDiceTool = new FunctionTool({
   name: 'roll_dice',
@@ -118,6 +126,40 @@ export const searchWebTool = new FunctionTool({
   execute: async (input) => await searchWeb(input)
 })
 
+export const rememberUserTool = new FunctionTool({
+  name: 'remember_user',
+  description:
+    'Remember a fact about a user. Use when someone shares personal details worth remembering — their name preference, favorite anime, hobbies, birthday, etc. Only store genuinely useful facts, not temporary conversation details.',
+  parameters: z.object({
+    user_id: z.string().describe('The display name of the user'),
+    fact_key: z.string().describe('A short label for the fact (e.g. "favorite_anime", "nickname", "birthday")'),
+    fact_value: z.string().describe('The value of the fact (e.g. "Frieren", "Ali", "March 15")')
+  }),
+  execute: async (input) => rememberUser(input)
+})
+
+export const recallUserTool = new FunctionTool({
+  name: 'recall_user',
+  description: 'Recall stored facts about a user. Use when you want to check what you remember about someone.',
+  parameters: z.object({
+    user_id: z.string().describe('The display name of the user')
+  }),
+  execute: async (input) => recallUser(input)
+})
+
+export const setReminderTool = new FunctionTool({
+  name: 'set_reminder',
+  description:
+    'Set a reminder for a user. Use when someone asks you to remind them about something. You can set reminders from 1 minute to 7 days in the future.',
+  parameters: z.object({
+    user_id: z.string().describe('Discord display name of the user to remind'),
+    channel_id: z.string().describe('The channel ID where the reminder was set'),
+    reminder: z.string().describe('What to remind them about'),
+    delay_minutes: z.number().describe('Minutes from now until the reminder (1-10080, i.e., up to 7 days)')
+  }),
+  execute: async (input) => setReminder(input)
+})
+
 /** All tool instances registered with the Roka LlmAgent. */
 export const rokaTools = [
   rollDiceTool,
@@ -126,5 +168,8 @@ export const rokaTools = [
   searchAnimeTool,
   getAnimeScheduleTool,
   getWeatherTool,
-  searchWebTool
+  searchWebTool,
+  rememberUserTool,
+  recallUserTool,
+  setReminderTool
 ]

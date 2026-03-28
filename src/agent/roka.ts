@@ -15,6 +15,7 @@ import type { WindowMessage } from '../session/types.js'
 import { config } from '../config.js'
 import { rokaTools } from './tools/index.js'
 import { saveMessage, loadHistory } from '../storage/sessionStore.js'
+import { getAllFactsForPrompt } from '../storage/userMemory.js'
 
 export interface ImageAttachment {
   url: string
@@ -315,7 +316,17 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
   const hour = getLocalHour()
   const tone = detectTone(fakeMessages, hour)
 
-  const systemPrompt = assembleSystemPrompt({ tone, participants, hour, displayName })
+  let systemPrompt = assembleSystemPrompt({ tone, participants, hour, displayName })
+
+  // Inject per-user relationship memory into the system prompt
+  try {
+    const userFacts = getAllFactsForPrompt(displayName)
+    if (userFacts) {
+      systemPrompt += `\n\n## What You Remember About ${displayName}\n- ${userFacts}`
+    }
+  } catch (error) {
+    logger.warn({ displayName, error }, 'Failed to load user memory for prompt injection')
+  }
 
   logger.debug({ tone, participantCount: participants.length, hour }, 'Prompt assembled')
 
