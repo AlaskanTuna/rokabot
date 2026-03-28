@@ -6,6 +6,7 @@ import { getRandomBusy, getRandomDecline, getRandomEmptyMention, getRandomError,
 import { buildRokaMessage } from '../messageBuilder.js'
 import { generateResponse, type ImageAttachment } from '../../agent/roka.js'
 import { isChannelBusy, markBusy, markFree } from '../concurrency.js'
+import { shouldReact } from '../emojiReactor.js'
 
 // Discord Components V2 type discriminants
 const TEXT_DISPLAY = 10
@@ -66,6 +67,14 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
       : null
 
     const isReplyToBot = referencedMessage?.author?.id === client.user.id
+
+    // Passive emoji reactions (all guild messages, not just mentions)
+    if (message.guild) {
+      const emoji = shouldReact(message.content, message.channelId)
+      if (emoji) {
+        message.react(emoji).catch(() => {}) // fire-and-forget, don't block
+      }
+    }
 
     if (!isMentioned && !isReplyToBot) return
 
