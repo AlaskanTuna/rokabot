@@ -50,14 +50,13 @@ export const GACHA_ITEMS: GachaItem[] = [
     id: 'fortune_sunny',
     name: 'Sunshine Blessing',
     rarity: 'common',
-    description: "Warm sunshine all day~ Perfect weather for drying laundry! ...I mean, for going on a walk! Fufu~"
+    description: 'Warm sunshine all day~ Perfect weather for drying laundry! ...I mean, for going on a walk! Fufu~'
   },
   {
     id: 'fortune_rainy',
     name: 'Rainy Day Comfort',
     rarity: 'common',
-    description:
-      "Rain today~ Stay cozy inside with a warm drink, okay? I'll make some hot tea if you come by the shop."
+    description: "Rain today~ Stay cozy inside with a warm drink, okay? I'll make some hot tea if you come by the shop."
   },
   {
     id: 'fortune_wind',
@@ -97,13 +96,15 @@ export const GACHA_ITEMS: GachaItem[] = [
     id: 'tip_miso',
     name: 'Miso Soup Secret',
     rarity: 'common',
-    description: 'Never boil miso soup after adding the miso paste! It ruins the flavor~ Just stir it in gently at the end.'
+    description:
+      'Never boil miso soup after adding the miso paste! It ruins the flavor~ Just stir it in gently at the end.'
   },
   {
     id: 'quote_morning',
     name: 'Morning Greeting',
     rarity: 'common',
-    description: 'Good morning~ Have you eaten breakfast yet? You should eat properly! A good day starts with a full tummy!'
+    description:
+      'Good morning~ Have you eaten breakfast yet? You should eat properly! A good day starts with a full tummy!'
   },
   {
     id: 'quote_evening',
@@ -131,7 +132,7 @@ export const GACHA_ITEMS: GachaItem[] = [
     name: 'Happy Mood Reading',
     rarity: 'common',
     description:
-      "I can feel it~ today is going to be a really happy day for you! Your smile will be contagious~ spread it around! \u266A"
+      'I can feel it~ today is going to be a really happy day for you! Your smile will be contagious~ spread it around! \u266A'
   },
   {
     id: 'mood_calm',
@@ -145,7 +146,7 @@ export const GACHA_ITEMS: GachaItem[] = [
     name: 'Energetic Mood Reading',
     rarity: 'common',
     description:
-      "Wow, so much energy today~! Channel it into something fun! Maybe cleaning? ...No? Just me? Okay~ \u266A"
+      'Wow, so much energy today~! Channel it into something fun! Maybe cleaning? ...No? Just me? Okay~ \u266A'
   },
   {
     id: 'observe_cat',
@@ -166,14 +167,14 @@ export const GACHA_ITEMS: GachaItem[] = [
     name: "Roka's Sky Gazing",
     rarity: 'common',
     description:
-      "I spent a few minutes watching the clouds today~ One of them looked like a rice ball! Or maybe I was just hungry..."
+      'I spent a few minutes watching the clouds today~ One of them looked like a rice ball! Or maybe I was just hungry...'
   },
   {
     id: 'fortune_study',
     name: 'Study Fortune',
     rarity: 'common',
     description:
-      "A good day for learning something new! Your brain is extra sharp today~ ...Unlike mine. I keep forgetting where I put the broom."
+      'A good day for learning something new! Your brain is extra sharp today~ ...Unlike mine. I keep forgetting where I put the broom.'
   },
   {
     id: 'fortune_social',
@@ -190,28 +191,28 @@ export const GACHA_ITEMS: GachaItem[] = [
     name: 'Hoori Mountain Legend',
     rarity: 'uncommon',
     description:
-      "Did you know~ the mountain behind the shop has an old legend about a sacred fox? The elders still leave offerings sometimes..."
+      'Did you know~ the mountain behind the shop has an old legend about a sacred fox? The elders still leave offerings sometimes...'
   },
   {
     id: 'trivia_festival',
     name: 'Local Festival Story',
     rarity: 'uncommon',
     description:
-      "Every summer we have a festival at the shrine~ I always help with the food stalls! My yakitori is pretty popular, if I do say so myself! \u266A"
+      'Every summer we have a festival at the shrine~ I always help with the food stalls! My yakitori is pretty popular, if I do say so myself! \u266A'
   },
   {
     id: 'trivia_shop',
     name: 'Sweets Shop History',
     rarity: 'uncommon',
     description:
-      "Our family shop has been here for three generations! Grandpa used to say the secret ingredient in everything is love~ ...and proper measurements."
+      'Our family shop has been here for three generations! Grandpa used to say the secret ingredient in everything is love~ ...and proper measurements.'
   },
   {
     id: 'season_spring',
     name: 'Spring Memory',
     rarity: 'uncommon',
     description:
-      "Spring is my favorite season~ The cherry blossoms outside the shop are so beautiful! I always make sakura mochi during hanami season."
+      'Spring is my favorite season~ The cherry blossoms outside the shop are so beautiful! I always make sakura mochi during hanami season.'
   },
   {
     id: 'season_summer',
@@ -225,14 +226,14 @@ export const GACHA_ITEMS: GachaItem[] = [
     name: 'Autumn Memory',
     rarity: 'uncommon',
     description:
-      "The maple leaves turn the most gorgeous red in autumn~ I like to press a few in a book. I have ones from every year since I was little!"
+      'The maple leaves turn the most gorgeous red in autumn~ I like to press a few in a book. I have ones from every year since I was little!'
   },
   {
     id: 'season_winter',
     name: 'Winter Memory',
     rarity: 'uncommon',
     description:
-      "Winter mornings are hard to wake up for~ but making warm mochi by the kotatsu makes it all worth it! The shop smells so cozy."
+      'Winter mornings are hard to wake up for~ but making warm mochi by the kotatsu makes it all worth it! The shop smells so cozy.'
   },
   {
     id: 'story_childhood',
@@ -260,7 +261,7 @@ export const GACHA_ITEMS: GachaItem[] = [
     name: "Roka's Stargazing Night",
     rarity: 'uncommon',
     description:
-      "On clear nights, I sometimes go up to the hill behind the shop to watch the stars~ The sky here is so clear... you can see the Milky Way!"
+      'On clear nights, I sometimes go up to the hill behind the shop to watch the stars~ The sky here is so clear... you can see the Milky Way!'
   },
 
   // ── Rare (6 items) ────────────────────────────────────────────────
@@ -284,7 +285,7 @@ export const GACHA_ITEMS: GachaItem[] = [
     name: "Roka's Honest Moment",
     rarity: 'rare',
     description:
-      'Sometimes I worry that I\'m too clumsy for the shop... But then a regular tells me my sweets made their day better, and I think... maybe I\'m doing okay. \u2606'
+      "Sometimes I worry that I'm too clumsy for the shop... But then a regular tells me my sweets made their day better, and I think... maybe I'm doing okay. \u2606"
   },
   {
     id: 'confession_dream',
