@@ -1,0 +1,36 @@
+name: Deploy to Pi
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '*.md'
+      - 'docs/**'
+      - '.claude/**'
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    timeout-minutes: 10
+
+    steps:
+      - name: Pull latest changes
+        run: cd ~/rokabot && git fetch origin main && git reset --hard origin/main
+
+      - name: Build and restart
+        run: cd ~/rokabot && docker compose up -d --build
+
+      - name: Wait for container
+        run: sleep 5
+
+      - name: Health check
+        run: |
+          CONTAINER=$(docker compose -f ~/rokabot/docker-compose.yml ps -q)
+          STATE=$(docker inspect --format='{{.State.Status}}' $CONTAINER)
+          if [ "$STATE" != "running" ]; then
+            echo "Container is $STATE, expected running"
+            docker compose -f ~/rokabot/docker-compose.yml logs --tail 20
+            exit 1
+          fi
+          echo "Container is running"
+          docker stats $CONTAINER --no-stream --format 'Memory: {{.MemUsage}}'
