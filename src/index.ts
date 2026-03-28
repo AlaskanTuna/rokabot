@@ -14,8 +14,15 @@ import { logger } from './utils/logger.js'
 import { createClient } from './discord/client.js'
 import { destroyAllSessions } from './agent/roka.js'
 import { closeDb } from './storage/database.js'
+import { startReminderScheduler, stopReminderScheduler } from './discord/reminderScheduler.js'
+import { destroyAllGames as destroyAllShiritoriGames } from './games/shiritori.js'
 
 const client = createClient()
+
+// Start the reminder scheduler once Discord is ready
+client.once('ready', () => {
+  startReminderScheduler(client)
+})
 
 // Lightweight health check server for monitoring
 const healthServer = http.createServer((_, res) => {
@@ -36,6 +43,8 @@ healthServer.listen(3000, '0.0.0.0')
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'Shutdown signal received')
 
+  stopReminderScheduler()
+  destroyAllShiritoriGames()
   await destroyAllSessions()
   closeDb()
   client.destroy()
