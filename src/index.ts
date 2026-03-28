@@ -13,6 +13,7 @@ import { config } from './config.js'
 import { logger } from './utils/logger.js'
 import { createClient } from './discord/client.js'
 import { destroyAllSessions } from './agent/roka.js'
+import { closeDb } from './storage/database.js'
 
 const client = createClient()
 
@@ -20,12 +21,14 @@ const client = createClient()
 const healthServer = http.createServer((_, res) => {
   const healthy = client.isReady()
   res.writeHead(healthy ? 200 : 503, { 'Content-Type': 'application/json' })
-  res.end(JSON.stringify({
-    status: healthy ? 'ok' : 'unhealthy',
-    uptime: process.uptime(),
-    memory: Math.round(process.memoryUsage().rss / 1024 / 1024),
-    discord: healthy ? 'connected' : 'disconnected',
-  }))
+  res.end(
+    JSON.stringify({
+      status: healthy ? 'ok' : 'unhealthy',
+      uptime: process.uptime(),
+      memory: Math.round(process.memoryUsage().rss / 1024 / 1024),
+      discord: healthy ? 'connected' : 'disconnected'
+    })
+  )
 })
 healthServer.listen(3000, '0.0.0.0')
 
@@ -34,6 +37,7 @@ async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'Shutdown signal received')
 
   await destroyAllSessions()
+  closeDb()
   client.destroy()
 
   logger.info('Roka is going to sleep. Oyasumi~')

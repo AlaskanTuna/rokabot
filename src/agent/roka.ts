@@ -3,7 +3,7 @@
  * Manages per-channel ADK sessions, idle timers, tone detection, and image handling.
  */
 
-import { LlmAgent, Runner, InMemorySessionService, isFinalResponse, BasePlugin } from '@google/adk'
+import { LlmAgent, Runner, InMemorySessionService, isFinalResponse, BasePlugin, createEvent } from '@google/adk'
 import type { LlmResponse, Event } from '@google/adk'
 import type { GetSessionRequest, Session } from '@google/adk'
 import type { Content, Part } from '@google/genai'
@@ -14,6 +14,7 @@ import type { ToneKey } from './prompts/tones.js'
 import type { WindowMessage } from '../session/types.js'
 import { config } from '../config.js'
 import { rokaTools } from './tools/index.js'
+import { saveMessage, loadHistory } from '../storage/sessionStore.js'
 
 export interface ImageAttachment {
   url: string
@@ -154,6 +155,39 @@ async function ensureSession(channelId: string) {
       state: { participants: [] }
     })
     logger.info({ channelId }, 'ADK session created')
+
+    // Cold-start rehydration: replay persisted history into the fresh ADK session
+    try {
+      const prior = loadHistory(channelId, config.session.windowSize)
+      if (prior.length > 0) {
+        for (const msg of prior) {
+          const role = msg.role === 'user' ? 'user' : 'model'
+          const content: Content = {
+            role,
+            parts: [
+              {
+                text: msg.role === 'user' ? `[${msg.displayName}]: ${msg.content}` : msg.content
+              }
+            ]
+          }
+          const event = createEvent({
+            author: msg.role === 'user' ? 'user' : 'roka',
+            invocationId: `rehydrate-${channelId}`,
+            content
+          })
+          await sessionService.appendEvent({ session, event })
+        }
+        // Re-fetch session to pick up the newly added events
+        session = (await sessionService.getSession({
+          appName: APP_NAME,
+          userId: channelId,
+          sessionId: channelId
+        }))!
+        logger.info({ channelId, rehydratedMessages: prior.length }, 'Session rehydrated from SQLite')
+      }
+    } catch (error) {
+      logger.warn({ channelId, error }, 'Failed to rehydrate session from SQLite')
+    }
   }
 
   return session
@@ -278,8 +312,8 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
 
   // Detect tone from recent session history
   const fakeMessages = eventsToWindowMessages(session.events ?? [])
-  const tone = detectTone(fakeMessages)
   const hour = getLocalHour()
+  const tone = detectTone(fakeMessages, hour)
 
   const systemPrompt = assembleSystemPrompt({ tone, participants, hour, displayName })
 
@@ -354,6 +388,16 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
     // Log tool fallback chains when multiple tools were called in a single request
     if (toolCallsThisRequest.length > 1) {
       logger.info({ tools: toolCallsThisRequest }, 'Tool fallback chain detected')
+    }
+
+    // Write-behind: persist the exchange to SQLite (non-blocking — failures don't break the response)
+    if (!KNOWN_FALLBACKS.has(responseText)) {
+      try {
+        saveMessage(channelId, 'user', displayName, userMessage)
+        saveMessage(channelId, 'assistant', 'Roka', responseText)
+      } catch (error) {
+        logger.warn({ channelId, error }, 'Failed to persist messages to SQLite')
+      }
     }
 
     logger.debug({ responseLength: responseText.length }, 'ADK response extracted')

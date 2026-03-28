@@ -6,6 +6,8 @@ services:
     mem_limit: 512m
     ports:
       - '3000:3000'
+    volumes:
+      - ./data:/app/data
     logging:
       driver: json-file
       options:
