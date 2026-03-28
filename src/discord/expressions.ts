@@ -14,7 +14,11 @@ const TONE_EXPRESSIONS: Record<ToneKey, string[]> = {
   curious: ['thinking', 'surprised', 'blank_stare', 'uncertain'],
   annoyed: ['exasperated', 'dissatisfied', 'dissatisfied_2', 'dissatisfied_3', 'frustrated', 'resigned'],
   tender: ['worried', 'troubled', 'anxious', 'gentle_smile', 'melancholy'],
-  confident: ['composed', 'base', 'explaining', 'attentive']
+  confident: ['composed', 'base', 'explaining', 'attentive'],
+  nostalgic: ['gentle_smile', 'melancholy', 'content', 'serene'],
+  mischievous: ['delighted', 'cheerful', 'smile'],
+  sleepy: ['relieved', 'content', 'gentle_smile'],
+  competitive: ['cheerful', 'delighted', 'explaining', 'attentive']
 }
 
 /**

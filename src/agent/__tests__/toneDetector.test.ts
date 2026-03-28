@@ -145,6 +145,99 @@ describe('detectTone', () => {
     })
   })
 
+  describe('sleepy detection', () => {
+    it('detects sleepy tone from sleep keywords', () => {
+      const messages = [makeMessage("I'm so sleepy and tired right now")]
+      expect(detectTone(messages)).toBe('sleepy')
+    })
+
+    it('detects sleepy tone from drowsy keywords', () => {
+      const messages = [makeMessage('I need a nap, feeling so exhausted')]
+      expect(detectTone(messages)).toBe('sleepy')
+    })
+
+    it('detects sleepy tone from emoji', () => {
+      const messages = [makeMessage("can't sleep 💤")]
+      expect(detectTone(messages)).toBe('sleepy')
+    })
+
+    it('detects sleepy tone with single keyword during late night hours', () => {
+      const messages = [makeMessage('I feel drowsy')]
+      expect(detectTone(messages, 23)).toBe('sleepy')
+    })
+
+    it('detects sleepy tone with single keyword at 2am', () => {
+      const messages = [makeMessage('time for bed')]
+      expect(detectTone(messages, 2)).toBe('sleepy')
+    })
+
+    it('does not trigger sleepy with single keyword during daytime', () => {
+      const messages = [makeMessage('I feel drowsy')]
+      expect(detectTone(messages, 14)).not.toBe('sleepy')
+    })
+
+    it('does not trigger sleepy with single keyword when no hour provided', () => {
+      const messages = [makeMessage('I feel drowsy')]
+      expect(detectTone(messages)).not.toBe('sleepy')
+    })
+  })
+
+  describe('nostalgic detection', () => {
+    it('detects nostalgic tone from memory keywords', () => {
+      const messages = [makeMessage('do you remember those days back then?')]
+      expect(detectTone(messages)).toBe('nostalgic')
+    })
+
+    it('detects nostalgic tone from childhood keywords', () => {
+      const messages = [makeMessage('my childhood memories are so precious')]
+      expect(detectTone(messages)).toBe('nostalgic')
+    })
+
+    it('detects nostalgic tone from past keywords', () => {
+      const messages = [makeMessage('I used to do that long ago')]
+      expect(detectTone(messages)).toBe('nostalgic')
+    })
+  })
+
+  describe('mischievous detection', () => {
+    it('detects mischievous tone from scheming keywords', () => {
+      const messages = [makeMessage("let's prank them, I dare you")]
+      expect(detectTone(messages)).toBe('mischievous')
+    })
+
+    it('detects mischievous tone from plotting keywords', () => {
+      const messages = [makeMessage('I have a secret trick to show you')]
+      expect(detectTone(messages)).toBe('mischievous')
+    })
+
+    it('detects mischievous tone from surprise keywords', () => {
+      const messages = [makeMessage("let's sneak in and surprise them")]
+      expect(detectTone(messages)).toBe('mischievous')
+    })
+  })
+
+  describe('competitive detection', () => {
+    it('detects competitive tone from game keywords', () => {
+      const messages = [makeMessage("let's play a game, I will win")]
+      expect(detectTone(messages)).toBe('competitive')
+    })
+
+    it('detects competitive tone from challenge keywords', () => {
+      const messages = [makeMessage('I challenge you to a rematch')]
+      expect(detectTone(messages)).toBe('competitive')
+    })
+
+    it('detects competitive tone from score keywords', () => {
+      const messages = [makeMessage('the score is tied, I need to beat you')]
+      expect(detectTone(messages)).toBe('competitive')
+    })
+
+    it('detects competitive tone from emoji', () => {
+      const messages = [makeMessage("let's play 🏆🎮")]
+      expect(detectTone(messages)).toBe('competitive')
+    })
+  })
+
   describe('default fallback', () => {
     it('returns playful when no patterns match', () => {
       const messages = [makeMessage('hey lets play some video games')]
@@ -187,6 +280,48 @@ describe('detectTone', () => {
       // "advice" + "recommend" = confident; no specific playful keywords (playful is fallback)
       const messages = [makeMessage('I need some advice, can you recommend something fun?')]
       expect(detectTone(messages)).toBe('confident')
+    })
+
+    it('annoyed beats sleepy when both match', () => {
+      // "no" + "won't" = annoyed; "tired" + "exhausted" = sleepy
+      // annoyed is checked before sleepy
+      const messages = [makeMessage("no I won't, I'm tired and exhausted")]
+      expect(detectTone(messages)).toBe('annoyed')
+    })
+
+    it('sleepy beats sincere when both match', () => {
+      // "sleepy" + "tired" = sleepy; "sad" + "lonely" = sincere
+      // sleepy is checked before sincere
+      const messages = [makeMessage('I feel sleepy and tired, also sad and lonely')]
+      expect(detectTone(messages)).toBe('sleepy')
+    })
+
+    it('sincere beats nostalgic when both match', () => {
+      // "sad" + "hurt" = sincere; "remember" + "past" = nostalgic
+      // sincere is checked before nostalgic
+      const messages = [makeMessage('I feel sad and hurt when I remember the past')]
+      expect(detectTone(messages)).toBe('sincere')
+    })
+
+    it('nostalgic beats domestic when both match', () => {
+      // "remember" + "used to" = nostalgic; "cook" + "dinner" = domestic
+      // nostalgic is checked before domestic
+      const messages = [makeMessage('I remember we used to cook dinner together')]
+      expect(detectTone(messages)).toBe('nostalgic')
+    })
+
+    it('domestic beats mischievous when both match', () => {
+      // "food" + "cook" = domestic; "prank" + "trick" = mischievous
+      // domestic is checked before mischievous
+      const messages = [makeMessage("let's cook some food, I'll prank them with a trick")]
+      expect(detectTone(messages)).toBe('domestic')
+    })
+
+    it('mischievous beats competitive when both match', () => {
+      // "dare" + "trick" = mischievous; "game" + "win" = competitive
+      // mischievous is checked before competitive
+      const messages = [makeMessage('I dare you to a trick in this game, you will not win')]
+      expect(detectTone(messages)).toBe('mischievous')
     })
   })
 

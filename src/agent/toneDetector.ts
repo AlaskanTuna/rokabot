@@ -10,11 +10,15 @@ import type { WindowMessage } from '../session/types.js'
  * 1. flustered — romantic keywords
  * 2. tender — soft vulnerability
  * 3. annoyed — defiance/recklessness
- * 4. sincere — heavy emotional
- * 5. domestic — food/daily life
- * 6. curious — questions/learning
- * 7. confident — help/advice/trust
- * 8. playful — default fallback
+ * 4. sleepy — drowsy/tired (also has late-night time trigger)
+ * 5. sincere — heavy emotional
+ * 6. nostalgic — wistful memories
+ * 7. domestic — food/daily life
+ * 8. mischievous — scheming/pranks
+ * 9. competitive — games/rivalry
+ * 10. curious — questions/learning
+ * 11. confident — help/advice/trust
+ * 12. playful — default fallback
  */
 
 interface ToneRule {
@@ -92,6 +96,24 @@ const TONE_PATTERNS: ToneRule[] = [
     ]
   },
   {
+    tone: 'sleepy',
+    minMatches: 2,
+    patterns: [
+      /\bsleepy\b/i,
+      /\btired\b/i,
+      /\byawn\b/i,
+      /\bbed\b/i,
+      /\bcan't sleep\b/i,
+      /\bdrowsy\b/i,
+      /\bnap\b/i,
+      /\bexhausted\b/i,
+      /\brest\b/i,
+      /\bzzz\b/i,
+      /💤/,
+      /😴/
+    ]
+  },
+  {
     tone: 'sincere',
     minMatches: 2,
     patterns: [
@@ -110,6 +132,24 @@ const TONE_PATTERNS: ToneRule[] = [
       /\bafraid/i,
       /\bexhaust/i,
       /😢|😭|🥺|💔/
+    ]
+  },
+  {
+    tone: 'nostalgic',
+    minMatches: 2,
+    patterns: [
+      /\bremember\b/i,
+      /\bmemories\b/i,
+      /\bback then\b/i,
+      /\bpast\b/i,
+      /\bchildhood\b/i,
+      /\bnostalgia\b/i,
+      /\bused to\b/i,
+      /\bold days\b/i,
+      /\bthose days\b/i,
+      /\blong ago\b/i,
+      /\bwhen I was\b/i,
+      /\bmiss those\b/i
     ]
   },
   {
@@ -135,6 +175,44 @@ const TONE_PATTERNS: ToneRule[] = [
       /\bcoffee\b/i,
       /\bclean/i,
       /🍵|🍳|🏠|☔|🌸/
+    ]
+  },
+  {
+    tone: 'mischievous',
+    minMatches: 2,
+    patterns: [
+      /\bdare\b/i,
+      /\bprank\b/i,
+      /\bsecret\b/i,
+      /\bbet\b/i,
+      /\bsneak\b/i,
+      /\bscheme\b/i,
+      /\btrick\b/i,
+      /\bsurprise\b/i,
+      /\bplot\b/i,
+      /\bplan something\b/i,
+      /\blet's do something\b/i,
+      /\bidea\b/i
+    ]
+  },
+  {
+    tone: 'competitive',
+    minMatches: 2,
+    patterns: [
+      /\bgame\b/i,
+      /\bwin\b/i,
+      /\blose\b/i,
+      /\bscore\b/i,
+      /\bmatch\b/i,
+      /\bversus\b/i,
+      /\bchallenge\b/i,
+      /\bbeat\b/i,
+      /\blet's play\b/i,
+      /\bcompete\b/i,
+      /\btournament\b/i,
+      /\brematch\b/i,
+      /🏆/,
+      /🎮/
     ]
   },
   {
@@ -178,14 +256,23 @@ const TONE_PATTERNS: ToneRule[] = [
 
 /**
  * Scan the last 3 messages for keyword patterns and return the best-matching tone.
+ * @param messages - Recent conversation messages
+ * @param hour - Optional current hour (0-23) for time-based tone triggers
  * @returns Matched tone key, or 'playful' as the default fallback
  */
-export function detectTone(messages: WindowMessage[]): ToneKey {
+export function detectTone(messages: WindowMessage[], hour?: number): ToneKey {
   const recentMessages = messages.slice(-3)
   const text = recentMessages.map((m) => m.content).join(' ')
 
   for (const { tone, patterns, minMatches } of TONE_PATTERNS) {
     const matchCount = patterns.filter((p) => p.test(text)).length
+
+    // Special case: sleepy triggers with only 1 match during late night hours (22:00-04:00)
+    if (tone === 'sleepy' && matchCount >= 1 && matchCount < minMatches && hour !== undefined) {
+      const isLateNight = hour >= 22 || hour <= 4
+      if (isLateNight) return 'sleepy'
+    }
+
     if (matchCount >= minMatches) return tone
   }
 

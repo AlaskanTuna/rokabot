@@ -56,7 +56,11 @@ describe('assembleSystemPrompt', () => {
       'curious',
       'annoyed',
       'tender',
-      'confident'
+      'confident',
+      'nostalgic',
+      'mischievous',
+      'sleepy',
+      'competitive'
     ]
     const results = tones.map((tone) => assembleSystemPrompt({ ...baseInput, tone }))
 
@@ -95,6 +99,30 @@ describe('assembleSystemPrompt', () => {
     const result = assembleSystemPrompt({ ...baseInput, tone: 'confident' })
     expect(result).toContain('Confident')
     expect(result).toContain(TONE_PROMPTS.confident)
+  })
+
+  it('contains nostalgic tone prompt when tone is nostalgic', () => {
+    const result = assembleSystemPrompt({ ...baseInput, tone: 'nostalgic' })
+    expect(result).toContain('Nostalgic')
+    expect(result).toContain(TONE_PROMPTS.nostalgic)
+  })
+
+  it('contains mischievous tone prompt when tone is mischievous', () => {
+    const result = assembleSystemPrompt({ ...baseInput, tone: 'mischievous' })
+    expect(result).toContain('Mischievous')
+    expect(result).toContain(TONE_PROMPTS.mischievous)
+  })
+
+  it('contains sleepy tone prompt when tone is sleepy', () => {
+    const result = assembleSystemPrompt({ ...baseInput, tone: 'sleepy' })
+    expect(result).toContain('Sleepy')
+    expect(result).toContain(TONE_PROMPTS.sleepy)
+  })
+
+  it('contains competitive tone prompt when tone is competitive', () => {
+    const result = assembleSystemPrompt({ ...baseInput, tone: 'competitive' })
+    expect(result).toContain('Competitive')
+    expect(result).toContain(TONE_PROMPTS.competitive)
   })
 
   it('handles multiple participants', () => {
