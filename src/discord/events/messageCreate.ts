@@ -7,6 +7,7 @@ import { buildRokaMessage } from '../messageBuilder.js'
 import { generateResponse, type ImageAttachment } from '../../agent/roka.js'
 import { isChannelBusy, markBusy, markFree } from '../concurrency.js'
 import { shouldReact } from '../emojiReactor.js'
+import { handleGachaMention } from './gachaMention.js'
 
 // Discord Components V2 type discriminants
 const TEXT_DISPLAY = 10
@@ -146,6 +147,13 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
           }
         }
       }
+    }
+
+    // Check for gacha keywords before calling LLM
+    const gachaKeywords = /^(gacha|draw|fortune|omikuji)$/i
+    if (gachaKeywords.test(content.trim())) {
+      const handled = await handleGachaMention(message)
+      if (handled) return
     }
 
     if (!content && imageAttachments.length === 0) {

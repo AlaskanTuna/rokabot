@@ -63,6 +63,19 @@ function createTables(database: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_game_scores_user_game
       ON game_scores (user_id, game);
+
+    CREATE TABLE IF NOT EXISTS gacha_collection (
+      user_id TEXT NOT NULL,
+      item_id TEXT NOT NULL,
+      obtained_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, item_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS gacha_daily (
+      user_id TEXT NOT NULL,
+      last_draw_date TEXT NOT NULL,
+      PRIMARY KEY (user_id)
+    );
   `)
 }
 
