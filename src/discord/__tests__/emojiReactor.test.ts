@@ -1,4 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+
+vi.mock('../../config.js', () => ({
+  config: {
+    logging: { level: 'silent' },
+    rateLimit: { rpm: 15, rpd: 500 },
+    session: { ttlMs: 300_000, windowSize: 10 }
+  }
+}))
+
 import { shouldReact, resetCooldowns } from '../emojiReactor.js'
 
 beforeEach(() => {

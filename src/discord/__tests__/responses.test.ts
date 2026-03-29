@@ -1,4 +1,14 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+
+vi.mock('../../config.js', () => ({
+  config: {
+    logging: { level: 'silent' },
+    discord: { token: 'test', clientId: 'test', maxMessageLength: 2000 },
+    rateLimit: { rpm: 15, rpd: 500 },
+    session: { ttlMs: 300_000, windowSize: 10 }
+  }
+}))
+
 import { getRandomDecline, getRandomError, splitResponse } from '../responses.js'
 
 describe('getRandomDecline', () => {

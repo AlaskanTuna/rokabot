@@ -1,3 +1,15 @@
+// Mock config to avoid requiring env vars
+vi.mock('../../config.js', () => ({
+  config: {
+    logging: { level: 'silent' },
+    discord: { token: 'test', clientId: 'test', maxMessageLength: 2000 },
+    gemini: { apiKey: 'test', model: 'test', timeout: 15000, maxRetries: 1, maxOutputTokens: 300 },
+    rateLimit: { rpm: 15, rpd: 500 },
+    session: { ttlMs: 300_000, windowSize: 10 },
+    timezone: 'UTC'
+  }
+}))
+
 // Mock jikanThrottle to be a no-op so tests don't hang on fake timers
 vi.mock('../tools/jikanThrottle.js', () => ({
   jikanThrottle: vi.fn().mockResolvedValue(undefined)
