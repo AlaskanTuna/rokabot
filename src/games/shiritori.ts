@@ -19,6 +19,7 @@ export interface ShiritoriGame {
   active: boolean
   started: boolean // true once first move has been made (joining locked)
   timeoutTimer: ReturnType<typeof setTimeout> | null
+  timeoutAt: number
   onTimeout?: (channelId: string, playerName: string) => void
 }
 
@@ -89,6 +90,7 @@ function resetTimeout(game: ShiritoriGame): void {
 
   if (!game.active || !game.started || game.currentPlayerOrder.length < 2) return
 
+  game.timeoutAt = Math.floor(Date.now() / 1000) + 120
   game.timeoutTimer = setTimeout(() => {
     handleTimeout(game)
   }, TIMEOUT_MS)
@@ -143,7 +145,8 @@ export function startGame(channelId: string, starterName: string): ShiritoriResu
     currentTurnIndex: 0,
     active: true,
     started: false,
-    timeoutTimer: null
+    timeoutTimer: null,
+    timeoutAt: 0
   }
 
   activeGames.set(channelId, game)
@@ -280,6 +283,12 @@ export function endGame(channelId: string): { message: string; scores: Map<strin
     message: `Game over!\n\n${scoreboard}`,
     scores
   }
+}
+
+/** Get the timeout-at Unix timestamp (seconds) for a channel's active game. */
+export function getTimeoutAt(channelId: string): number {
+  const game = activeGames.get(channelId)
+  return game?.timeoutAt ?? 0
 }
 
 export function getGame(channelId: string): ShiritoriGame | undefined {

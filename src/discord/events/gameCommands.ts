@@ -1,10 +1,11 @@
 /**
  * Slash command handlers for game features (gacha draw, collection, stats, hangman, shiritori).
- * Each handler formats results as Discord embeds with in-character Roka flavor.
+ * Each handler formats results as Discord embeds/containers with in-character Roka flavor.
  */
 
 import type { ChatInputCommandInteraction, Client, TextBasedChannel } from 'discord.js'
-import { EmbedBuilder } from 'discord.js'
+import { EmbedBuilder, MessageFlags } from 'discord.js'
+import { ContainerBuilder, SeparatorBuilder, TextDisplayBuilder } from '@discordjs/builders'
 import { logger } from '../../utils/logger.js'
 import { drawItem, getCollection, getCollectionStats } from '../../games/gacha.js'
 import { RARITY_COLORS, RARITY_EMOJI, getTotalItemCount, type GachaRarity } from '../../games/data/gachaItems.js'
@@ -14,6 +15,7 @@ import {
   guessWord,
   getGame,
   getHangmanArt,
+  getTimeoutAt as getHangmanTimeoutAt,
   setTimeoutCallback
 } from '../../games/hangman.js'
 import {
@@ -22,9 +24,64 @@ import {
   submitWord as submitShiritoriWord,
   endGame as endShiritori,
   getScores as getShiritoriScores,
-  getGame as getShiritoriGame
+  getGame as getShiritoriGame,
+  getTimeoutAt as getShiritoriTimeoutAt
 } from '../../games/shiritori.js'
 import { getDb } from '../../storage/database.js'
+
+// ── Components V2 game container builder ──
+
+interface GameContainerOptions {
+  accentColor: number
+  title: string
+  body: string
+  footer?: string
+}
+
+function buildGameContainer(options: GameContainerOptions) {
+  const container = new ContainerBuilder()
+    .setAccentColor(options.accentColor)
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`### ${options.title}`))
+    .addSeparatorComponents(new SeparatorBuilder())
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(options.body))
+
+  if (options.footer) {
+    container
+      .addSeparatorComponents(new SeparatorBuilder())
+      .addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${options.footer}`))
+  }
+
+  return {
+    components: [container],
+    flags: MessageFlags.IsComponentsV2 as typeof MessageFlags.IsComponentsV2
+  }
+}
+
+// ── Hangman accent colors ──
+
+const HANGMAN_COLORS = {
+  start: 0x6c8aff,
+  correct: 0x34c759,
+  wrong: 0xff453a,
+  duplicate: 0xff9f0a,
+  win: 0xffd700,
+  lose: 0x8b0000,
+  info: 0xb0c4de
+}
+
+// ── Shiritori accent colors ──
+
+const SHIRITORI_COLORS = {
+  start: 0x6c8aff,
+  join: 0x6c8aff,
+  valid: 0x34c759,
+  invalid: 0xff453a,
+  end: 0xffd700,
+  scores: 0xb0c4de,
+  info: 0xff9f0a
+}
+
+// ── Gacha handlers (unchanged — keep embeds) ──
 
 const ALREADY_DRAWN_MESSAGES = [
   'Mou~ you already drew today! Come back tomorrow for another try~ \u266A',
@@ -146,9 +203,15 @@ function handleStats(interaction: ChatInputCommandInteraction) {
 
 // ── Hangman helpers ──
 
-function buildHangmanDisplay(display: string, art: string, lives: number): string {
+function buildHangmanBody(display: string, art: string, lives: number, timeoutAt?: number): string {
   const hearts = '\u2764\uFE0F'.repeat(lives) + '\uD83D\uDDA4'.repeat(6 - lives)
-  return `\`${display}\`\n\n\`\`\`\n${art}\n\`\`\`\nLives: ${hearts}`
+  const lines = [`\`${display}\``, '', `\`\`\`\n${art}\n\`\`\``, '', hearts]
+
+  if (timeoutAt && timeoutAt > 0) {
+    lines.push('', `\u23F1\uFE0F <t:${timeoutAt}:R>`)
+  }
+
+  return lines.join('\n')
 }
 
 function saveHangmanScore(playerId: string, score: number): void {
@@ -167,14 +230,27 @@ function handleHangmanStart(interaction: ChatInputCommandInteraction) {
   const result = startHangman(channelId, playerId)
 
   if (!result.success) {
-    return { content: result.message }
+    return buildGameContainer({
+      accentColor: HANGMAN_COLORS.info,
+      title: 'Hangman',
+      body: result.message
+    })
   }
 
   const game = getGame(channelId)!
   const art = getHangmanArt(game.remainingLives)
-  const body = buildHangmanDisplay(result.display!, art, game.remainingLives)
+  const timeoutAt = getHangmanTimeoutAt(channelId)
+  const body = [
+    `**Hint:** ${result.hint}`,
+    '',
+    buildHangmanBody(result.display!, art, game.remainingLives, timeoutAt)
+  ].join('\n')
 
-  return { content: `${result.message}\n\nHint: ${result.hint}\n\n${body}` }
+  return buildGameContainer({
+    accentColor: HANGMAN_COLORS.start,
+    title: 'Hangman',
+    body: `Let's play hangman~ \u266A\n\n${body}`
+  })
 }
 
 function handleHangmanGuess(interaction: ChatInputCommandInteraction) {
@@ -187,40 +263,102 @@ function handleHangmanGuess(interaction: ChatInputCommandInteraction) {
     const result = guessLetter(channelId, input)
 
     if (!result.success) {
+      // Duplicate letter or no active game
       if (result.display) {
         const art = getHangmanArt(result.remainingLives)
-        return { content: `${result.message}\n\n${buildHangmanDisplay(result.display, art, result.remainingLives)}` }
+        const timeoutAt = getHangmanTimeoutAt(channelId)
+        const body = buildHangmanBody(result.display, art, result.remainingLives, timeoutAt)
+        return buildGameContainer({
+          accentColor: HANGMAN_COLORS.duplicate,
+          title: 'Hangman',
+          body: `${result.message}\n\n${body}`
+        })
       }
-      return { content: result.message }
+      return buildGameContainer({
+        accentColor: HANGMAN_COLORS.info,
+        title: 'Hangman',
+        body: result.message
+      })
     }
 
     if (result.gameOver) {
       const art = getHangmanArt(result.remainingLives)
-      const score = result.won ? result.remainingLives : 0
-      saveHangmanScore(playerId, score)
-      return { content: `${result.message}\n\n\`${result.display}\`\n\n\`\`\`\n${art}\n\`\`\`` }
+      const display = `\`${result.display}\`\n\n\`\`\`\n${art}\n\`\`\``
+
+      if (result.won) {
+        const score = result.remainingLives
+        saveHangmanScore(playerId, score)
+        return buildGameContainer({
+          accentColor: HANGMAN_COLORS.win,
+          title: 'Hangman',
+          body: `${result.message}\n\n${display}`,
+          footer: `Score: ${score} point${score !== 1 ? 's' : ''}`
+        })
+      } else {
+        saveHangmanScore(playerId, 0)
+        return buildGameContainer({
+          accentColor: HANGMAN_COLORS.lose,
+          title: 'Hangman',
+          body: `${result.message}\n\n${display}`,
+          footer: `The word was: ${result.word}`
+        })
+      }
     }
 
     const art = getHangmanArt(result.remainingLives)
-    return { content: `${result.message}\n\n${buildHangmanDisplay(result.display, art, result.remainingLives)}` }
+    const timeoutAt = getHangmanTimeoutAt(channelId)
+    const body = buildHangmanBody(result.display, art, result.remainingLives, timeoutAt)
+    const color = result.correct ? HANGMAN_COLORS.correct : HANGMAN_COLORS.wrong
+    return buildGameContainer({
+      accentColor: color,
+      title: 'Hangman',
+      body: `${result.message}\n\n${body}`
+    })
   }
 
   // Full word guess
   const result = guessWord(channelId, input)
 
   if (!result.success) {
-    return { content: result.message }
+    return buildGameContainer({
+      accentColor: HANGMAN_COLORS.info,
+      title: 'Hangman',
+      body: result.message
+    })
   }
 
   if (result.gameOver) {
     const art = getHangmanArt(result.remainingLives)
-    const score = result.won ? result.remainingLives : 0
-    saveHangmanScore(playerId, score)
-    return { content: `${result.message}\n\n\`${result.display}\`\n\n\`\`\`\n${art}\n\`\`\`` }
+    const display = `\`${result.display}\`\n\n\`\`\`\n${art}\n\`\`\``
+
+    if (result.won) {
+      const score = result.remainingLives
+      saveHangmanScore(playerId, score)
+      return buildGameContainer({
+        accentColor: HANGMAN_COLORS.win,
+        title: 'Hangman',
+        body: `${result.message}\n\n${display}`,
+        footer: `Score: ${score} point${score !== 1 ? 's' : ''}`
+      })
+    } else {
+      saveHangmanScore(playerId, 0)
+      return buildGameContainer({
+        accentColor: HANGMAN_COLORS.lose,
+        title: 'Hangman',
+        body: `${result.message}\n\n${display}`,
+        footer: `The word was: ${result.display}`
+      })
+    }
   }
 
   const art = getHangmanArt(result.remainingLives)
-  return { content: `${result.message}\n\n${buildHangmanDisplay(result.display, art, result.remainingLives)}` }
+  const timeoutAt = getHangmanTimeoutAt(channelId)
+  const body = buildHangmanBody(result.display, art, result.remainingLives, timeoutAt)
+  return buildGameContainer({
+    accentColor: HANGMAN_COLORS.wrong,
+    title: 'Hangman',
+    body: `${result.message}\n\n${body}`
+  })
 }
 
 // ── Shiritori helpers ──
@@ -243,12 +381,19 @@ function handleShiritoriStart(interaction: ChatInputCommandInteraction) {
   const result = startShiritori(channelId, displayName)
 
   if (!result.success) {
-    return { content: result.message }
+    return buildGameContainer({
+      accentColor: SHIRITORI_COLORS.info,
+      title: 'Shiritori',
+      body: result.message
+    })
   }
 
-  return {
-    content: `Alright~ let's play shiritori! \u266A ${result.message}`
-  }
+  return buildGameContainer({
+    accentColor: SHIRITORI_COLORS.start,
+    title: 'Shiritori',
+    body: `Alright~ let's play shiritori! \u266A\n\n${result.message}`,
+    footer: 'Use /shiritori join to join'
+  })
 }
 
 function handleShiritoriJoin(interaction: ChatInputCommandInteraction) {
@@ -259,10 +404,21 @@ function handleShiritoriJoin(interaction: ChatInputCommandInteraction) {
   const result = joinShiritori(channelId, displayName)
 
   if (!result.success) {
-    return { content: result.message }
+    return buildGameContainer({
+      accentColor: SHIRITORI_COLORS.info,
+      title: 'Shiritori',
+      body: result.message
+    })
   }
 
-  return { content: `Welcome to the game, **${displayName}**~! ${result.message}` }
+  const game = getShiritoriGame(channelId)
+  const playerCount = game ? game.currentPlayerOrder.length : 0
+
+  return buildGameContainer({
+    accentColor: SHIRITORI_COLORS.join,
+    title: 'Shiritori',
+    body: `Welcome to the game, **${displayName}**~! ${result.message}\n\n${playerCount} player${playerCount !== 1 ? 's' : ''} in the game`
+  })
 }
 
 function handleShiritoriPlay(interaction: ChatInputCommandInteraction) {
@@ -274,10 +430,21 @@ function handleShiritoriPlay(interaction: ChatInputCommandInteraction) {
   const result = submitShiritoriWord(channelId, displayName, word)
 
   if (!result.success) {
-    return { content: result.message }
+    return buildGameContainer({
+      accentColor: SHIRITORI_COLORS.invalid,
+      title: 'Shiritori',
+      body: result.message
+    })
   }
 
-  return { content: `Nice one~ ${result.message}` }
+  const timeoutAt = getShiritoriTimeoutAt(channelId)
+  const timerLine = timeoutAt > 0 ? `\n\n\u23F1\uFE0F <t:${timeoutAt}:R>` : ''
+
+  return buildGameContainer({
+    accentColor: SHIRITORI_COLORS.valid,
+    title: 'Shiritori',
+    body: `Nice one~ ${result.message}${timerLine}`
+  })
 }
 
 function handleShiritoriEnd(interaction: ChatInputCommandInteraction) {
@@ -285,12 +452,15 @@ function handleShiritoriEnd(interaction: ChatInputCommandInteraction) {
   const game = getShiritoriGame(channelId)
 
   if (!game) {
-    return { content: 'There is no active game in this channel!' }
+    return buildGameContainer({
+      accentColor: SHIRITORI_COLORS.info,
+      title: 'Shiritori',
+      body: 'There is no active game in this channel!'
+    })
   }
 
   // Save scores for all players before ending
   const playerUserIds = new Map<string, string>()
-  // We can only map the ending user; for others, we use displayName as userId fallback
   const member = interaction.member
   const displayName = member && 'displayName' in member ? member.displayName : interaction.user.displayName
   playerUserIds.set(displayName, interaction.user.id)
@@ -303,15 +473,47 @@ function handleShiritoriEnd(interaction: ChatInputCommandInteraction) {
     saveShiritoriScore(userId, score)
   }
 
-  return { content: `Game over! Here are the final scores~\n\n${result.message}` }
+  return buildGameContainer({
+    accentColor: SHIRITORI_COLORS.end,
+    title: 'Shiritori',
+    body: `Game over! Here are the final scores~\n\n${result.message}`
+  })
 }
 
 function handleShiritoriScores(interaction: ChatInputCommandInteraction) {
-  const result = getShiritoriScores(interaction.channelId)
-  return { content: result.message }
+  const channelId = interaction.channelId
+  const result = getShiritoriScores(channelId)
+
+  if (!result.success) {
+    return buildGameContainer({
+      accentColor: SHIRITORI_COLORS.info,
+      title: 'Shiritori',
+      body: result.message
+    })
+  }
+
+  return buildGameContainer({
+    accentColor: SHIRITORI_COLORS.scores,
+    title: 'Shiritori',
+    body: result.message
+  })
 }
 
 const GAME_COMMAND_NAMES = new Set(['gacha', 'hangman', 'shiritori'])
+
+/** Build a Components V2 container for timeout notifications sent to the channel. */
+function buildTimeoutContainer(accentColor: number, title: string, body: string) {
+  const container = new ContainerBuilder()
+    .setAccentColor(accentColor)
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`### ${title}`))
+    .addSeparatorComponents(new SeparatorBuilder())
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(body))
+
+  return {
+    components: [container],
+    flags: MessageFlags.IsComponentsV2 as typeof MessageFlags.IsComponentsV2
+  }
+}
 
 /** Create a dispatcher that routes game slash commands to their respective handlers. */
 export function createGameCommandHandler(client?: Client) {
@@ -320,8 +522,13 @@ export function createGameCommandHandler(client?: Client) {
     setTimeoutCallback((channelId: string, word: string) => {
       const channel = client.channels.cache.get(channelId)
       if (channel && 'send' in channel) {
+        const payload = buildTimeoutContainer(
+          HANGMAN_COLORS.lose,
+          'Hangman',
+          `Time's up~ The word was **${word}**. You took too long! \u{1F4A4}`
+        )
         ;(channel as Extract<TextBasedChannel, { send: unknown }>)
-          .send(`Time's up~ The word was **${word}**. You took too long! \u{1F4A4}`)
+          .send(payload)
           .catch((err: unknown) => logger.error({ error: err, channelId }, 'Failed to send hangman timeout message'))
       }
     })
@@ -329,12 +536,8 @@ export function createGameCommandHandler(client?: Client) {
 
   // Wire up the shiritori timeout callback
   if (client) {
-    // Import game module and set timeout callback
     import('../../games/shiritori.js').then((shiritori) => {
       const game = shiritori
-      // We need to set a callback on each game. Instead, we use the onTimeout property.
-      // The timeout is handled internally, but we need to notify the channel.
-      // We'll set up a polling-free approach by patching the startGame to set onTimeout.
       const origStartGame = game.startGame
       game.startGame = (channelId: string, starterName: string) => {
         const result = origStartGame(channelId, starterName)
@@ -348,17 +551,25 @@ export function createGameCommandHandler(client?: Client) {
                 const remaining = g.currentPlayerOrder
                 if (!g.active && remaining.length === 1) {
                   const winner = remaining[0]
+                  const payload = buildTimeoutContainer(
+                    SHIRITORI_COLORS.info,
+                    'Shiritori',
+                    `**${playerName}** took too long... they're out! \u{1F4A4}\n\n**${winner}** wins the game! Congratulations~ \u266A`
+                  )
                   sendable
-                    .send(
-                      `**${playerName}** took too long... they're out! \u{1F4A4}\n\n**${winner}** wins the game! Congratulations~ \u266A`
-                    )
+                    .send(payload)
                     .catch((err: unknown) =>
                       logger.error({ error: err, channelId: chId }, 'Failed to send shiritori timeout message')
                     )
                 } else {
                   const nextPlayer = remaining[g.currentTurnIndex]
+                  const payload = buildTimeoutContainer(
+                    SHIRITORI_COLORS.info,
+                    'Shiritori',
+                    `**${playerName}** took too long... they're out! \u{1F4A4} Your turn, **${nextPlayer}**!`
+                  )
                   sendable
-                    .send(`**${playerName}** took too long... they're out! \u{1F4A4} Your turn, **${nextPlayer}**!`)
+                    .send(payload)
                     .catch((err: unknown) =>
                       logger.error({ error: err, channelId: chId }, 'Failed to send shiritori timeout message')
                     )

@@ -203,7 +203,8 @@ describe('getDisplayWord', () => {
       guessedLetters: new Set(),
       remainingLives: 6,
       active: true,
-      timeoutTimer: null
+      timeoutTimer: null,
+      timeoutAt: 0
     }
     expect(getDisplayWord(game)).toBe('_ _ _ _ _')
   })
@@ -217,7 +218,8 @@ describe('getDisplayWord', () => {
       guessedLetters: new Set(['r', 'a']),
       remainingLives: 6,
       active: true,
-      timeoutTimer: null
+      timeoutTimer: null,
+      timeoutAt: 0
     }
     expect(getDisplayWord(game)).toBe('r a _ _ _')
   })
@@ -231,7 +233,8 @@ describe('getDisplayWord', () => {
       guessedLetters: new Set(['r', 'a', 'm', 'e', 'n']),
       remainingLives: 6,
       active: true,
-      timeoutTimer: null
+      timeoutTimer: null,
+      timeoutAt: 0
     }
     expect(getDisplayWord(game)).toBe('r a m e n')
   })
@@ -245,7 +248,8 @@ describe('getDisplayWord', () => {
       guessedLetters: new Set(['t']),
       remainingLives: 6,
       active: true,
-      timeoutTimer: null
+      timeoutTimer: null,
+      timeoutAt: 0
     }
     expect(getDisplayWord(game)).toBe('_ _ t t _')
   })

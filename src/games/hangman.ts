@@ -14,6 +14,7 @@ export interface HangmanGame {
   remainingLives: number
   active: boolean
   timeoutTimer: ReturnType<typeof setTimeout> | null
+  timeoutAt: number
 }
 
 export interface StartGameResult {
@@ -68,6 +69,7 @@ function resetTimer(game: HangmanGame): void {
   if (game.timeoutTimer) {
     clearTimeout(game.timeoutTimer)
   }
+  game.timeoutAt = Math.floor(Date.now() / 1000) + 120
   game.timeoutTimer = setTimeout(() => {
     const word = game.word
     const channelId = game.channelId
@@ -127,7 +129,8 @@ export function startGame(channelId: string, playerId: string): StartGameResult 
     guessedLetters: new Set(),
     remainingLives: INITIAL_LIVES,
     active: true,
-    timeoutTimer: null
+    timeoutTimer: null,
+    timeoutAt: 0
   }
 
   activeGames.set(channelId, game)
@@ -297,6 +300,12 @@ export function guessWord(channelId: string, word: string): GuessWordResult {
     won: false,
     remainingLives: lives
   }
+}
+
+/** Get the timeout-at Unix timestamp (seconds) for a channel's active game. */
+export function getTimeoutAt(channelId: string): number {
+  const game = activeGames.get(channelId)
+  return game?.timeoutAt ?? 0
 }
 
 /** Get the active game for a channel, if any. */
