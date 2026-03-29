@@ -92,17 +92,26 @@ export const HANGMAN_WORDS: HangmanWord[] = [
   { word: 'protagonist', hint: "It's a visual novel term~ The main character you play as!" },
   { word: 'confession', hint: "It's a visual novel term~ When feelings are finally revealed~" },
   { word: 'festival', hint: "It's a visual novel term~ A school event full of memories!" },
-  { word: 'fireworks', hint: "It's a visual novel term~ A romantic scene under the night sky~" },
-  { word: 'childhood', hint: "It's a visual novel term~ A bond from long ago..." },
+  {
+    word: 'fireworks',
+    hint: "It's a visual novel term~ Bright explosions lighting up the summer sky, a classic date scene~"
+  },
+  {
+    word: 'childhood',
+    hint: "It's a visual novel term~ The period of life before growing up, often tied to old promises~"
+  },
   { word: 'promise', hint: "It's a visual novel term~ A vow made between two people~" },
   { word: 'farewell', hint: "It's a visual novel term~ A bittersweet goodbye..." },
-  { word: 'reunion', hint: "It's a visual novel term~ Meeting again after a long time!" },
+  { word: 'ciallo', hint: "It's a visual novel term~ Meeting again after a long time!" }, // Ｃｉａｌｌｏ ～(∠・ω＜)⌒☆
   { word: 'nostalgia', hint: "It's a visual novel term~ A longing for the past~" },
   { word: 'memories', hint: "It's a visual novel term~ Precious moments kept in the heart!" },
   { word: 'rooftop', hint: "It's a visual novel term~ A classic spot for heart-to-heart talks!" },
   { word: 'classroom', hint: "It's a visual novel term~ Where everyday school life unfolds~" },
   { word: 'sunset', hint: "It's a visual novel term~ Golden light painting the sky..." },
-  { word: 'transfer', hint: "It's a visual novel term~ A new student arriving changes everything!" },
+  { word: 'transfer', hint: "It's a visual novel term~ A type of student who arrives mid-year at a new school!" },
+  { word: 'route', hint: "It's a visual novel term~ A specific path through the story for one character!" },
+  { word: 'ending', hint: "It's a visual novel term~ The conclusion of a story path, happy or sad~" },
+  { word: 'prologue', hint: "It's a visual novel term~ The beginning before the main story starts!" },
 
   // General Japanese words (~10)
   { word: 'sugoi', hint: "It's a Japanese word~ It means amazing or awesome!" },
