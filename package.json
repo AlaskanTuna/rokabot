@@ -15,7 +15,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:chat": "tsx scripts/test-chat.ts",
-    "test:smoke": "tsx scripts/test-adk-smoke.ts"
+    "test:smoke": "tsx scripts/test-adk-smoke.ts",
+    "test:features": "tsx scripts/test-features.ts"
   },
   "dependencies": {
     "@google/adk": "^0.1.0",

@@ -19,18 +19,22 @@
 
 ---
 
-Rokabot responds to `/chat` slash commands, @mentions, and replies with in-character dialogue. It can also perceive images attached to messages via Gemini's multimodal input. It maintains per-channel conversational memory using a 10-message sliding window with a 5-minute idle TTL. A 4-layer prompt system drives personality, speech patterns, dynamic tone selection, and channel awareness.
-
-All state is in-memory with no persistence. Bot restart = clean slate.
+Rokabot responds to `/chat` slash commands, @mentions, and replies with in-character dialogue. It can also perceive images attached to messages via Gemini's multimodal input. It maintains per-channel conversational memory using a 10-message sliding window with a 5-minute idle TTL, backed by SQLite for persistence across restarts. A 4-layer prompt system drives personality, speech patterns, dynamic tone selection, and channel awareness.
 
 ## Features
 
 - **Character roleplay** -- responds in-character as Maniwa Roka with personality-driven dialogue
 - **Multiple triggers** -- `/chat` slash command, @mentions, and reply detection
 - **Multimodal input** -- perceives images attached to messages (up to 4 MB each)
-- **8 dynamic tones** -- rule-based tone detection (zero LLM cost) adjusts personality across playful, sincere, domestic, flustered, curious, annoyed, tender, and confident moods
-- **7 agent tools** -- dice rolling, coin flip, timezone-aware clock, anime search, anime schedule, weather lookup, and web search (Tavily)
+- **12 dynamic tones** -- rule-based tone detection (zero LLM cost) adjusts personality across playful, sincere, domestic, flustered, curious, annoyed, tender, confident, nostalgic, mischievous, sleepy, and competitive moods
+- **10 agent tools** -- dice rolling, coin flip, timezone-aware clock, anime search, anime schedule, weather lookup, web search (Tavily), user memory (remember/recall), and reminders
 - **Standalone slash commands** -- `/roll_dice`, `/flip_coin`, `/time`, `/anime`, `/schedule`, `/weather`, `/search` with paginated results
+- **3 mini-games** -- `/shiritori` (word chain), `/gacha` (daily fortune draw), `/hangman` (anime-themed word guessing)
+- **Per-user memory** -- Roka remembers facts about users across sessions (nicknames, favorites, birthdays) via SQLite
+- **Reminders** -- users can ask Roka to remind them about things, delivered on schedule
+- **Passive emoji reactions** -- rule-based reactions to messages with contextual emoji, probability-gated and cooldown-limited
+- **SQLite persistence** -- conversation history, user memory, reminders, and game scores survive restarts
+- **Daily gacha collection** -- collectible fortune draws with 4 rarity tiers and persistent collection tracking
 - **Per-channel sessions** -- 10-message FIFO window with 5-minute idle TTL via ADK's InMemorySessionService
 - **Rate limiting** -- dual token-bucket (RPM) + daily counter (RPD) guard
 - **Concurrency guard** -- 1 active request per channel
@@ -47,9 +51,14 @@ graph TD
     Discord["Discord Layer\nRate limit + Concurrency guard"] --> Agent
     Agent["Roka Agent (ADK)\n4-layer prompt + Tone detection"] -->|prompt + history| Gemini
     Gemini["Gemini Flash Lite"] -->|tool call?| Tools
-    Tools["7 Tools\nDice, Coin, Time, Anime,\nSchedule, Weather, Web Search"] -->|result| Gemini
+    Tools["10 Tools\nDice, Coin, Time, Anime, Schedule,\nWeather, Web Search, Remember,\nRecall, Reminder"] -->|result| Gemini
     Gemini -->|response| Pipeline
     Pipeline["Response Pipeline\nComponents V2 + Tone styling"] -->|styled reply| User
+    Discord -->|"/shiritori, /gacha, /hangman"| Games
+    Games["Game Engine\nShiritori, Gacha, Hangman"] -->|game response| User
+    Agent -->|read/write| SQLite
+    Games -->|scores, collections| SQLite
+    SQLite[("SQLite\nSessions, User Memory,\nReminders, Game Scores")]
 ```
 
 <details>
@@ -59,16 +68,24 @@ How a user message flows through the system and becomes a styled, in-character r
 
 ```mermaid
 flowchart LR
-    Start([User message]) --> Guards{Rate limit +\nconcurrency OK?}
+    Start([User message]) --> Reaction{"Passive emoji\nreaction?"}
+    Reaction -->|Maybe 18%| React["React with emoji"]
+    Reaction --> Guards{Rate limit +\nconcurrency OK?}
     Guards -->|No| Reject([Decline / busy])
-    Guards -->|Yes| Session["Get or create ADK session"]
-    Session --> Prompt["Assemble system prompt\nDetect tone from history\nBuild 4 layers"]
+    Guards -->|Yes| Gacha{Gacha keyword?}
+    Gacha -->|Yes| Draw["Gacha draw\n(skip LLM)"]
+    Gacha -->|No| Session["Get or create\nADK session"]
+    Session --> Rehydrate{"Cold start?\n(no in-memory session)"}
+    Rehydrate -->|Yes| Load["Load history\nfrom SQLite"]
+    Rehydrate -->|No| Prompt
+    Load --> Prompt["Assemble system prompt\nDetect tone + Load user facts\nBuild 4 layers"]
     Prompt --> Gemini["Send to Gemini\nvia ADK Runner"]
     Gemini --> ToolCheck{Tool call?}
     ToolCheck -->|Yes| Execute["Execute tool\n(up to 3 chained calls)"]
     Execute --> Gemini
     ToolCheck -->|No| Format["Build Components V2 reply\nTone color + expression"]
-    Format --> Send([Send to Discord])
+    Format --> Persist["Write-behind\nto SQLite"]
+    Persist --> Send([Send to Discord])
 ```
 
 </details>
@@ -100,13 +117,16 @@ Tools available to the agent:
 | `get_anime_schedule` | Airing schedule by day/week/season | Jikan (MyAnimeList) |
 | `get_weather`        | Current weather for a city         | Open-Meteo          |
 | `search_web`         | Web search (fallback tool)         | Tavily              |
+| `remember_user`      | Remember a fact about a user       | Local (SQLite)      |
+| `recall_user`        | Recall stored facts about a user   | Local (SQLite)      |
+| `set_reminder`       | Set a timed reminder for a user    | Local (SQLite)      |
 
 </details>
 
 <details>
 <summary><strong>Prompt Assembly</strong></summary>
 
-The system prompt is assembled from 4 layers, kept within a ~1000-1600 token budget:
+The system prompt is assembled from 4 layers, kept within a ~1000-1800 token budget:
 
 ```mermaid
 flowchart TD
@@ -115,36 +135,53 @@ flowchart TD
     L2["Layer 2\nTone Variant"] --> Combine
     L3["Layer 3\nDynamic Context"] --> Combine
     Combine["Assembled\nSystem Prompt"]
+    UserFacts["User Memory\n(from SQLite)"] -->|appended if exists| Combine
 ```
 
-- **Layer 0 (Core)** -- personality, background, behavioral rules
+- **Layer 0 (Core)** -- personality, background, behavioral rules, abilities
 - **Layer 1 (Speech)** -- formatting rules, speech patterns, response length
-- **Layer 2 (Tone)** -- one of 8 tone variants selected by the tone detector
+- **Layer 2 (Tone)** -- one of 12 tone variants selected by the tone detector
 - **Layer 3 (Context)** -- time of day, participant names, current user
+- **User Memory** -- per-user facts appended when available (e.g., nickname, favorite anime)
 
 </details>
 
 <details>
-<summary><strong>Session Management</strong></summary>
+<summary><strong>Session & Persistence</strong></summary>
 
-Sessions are per-channel, managed via ADK's `InMemorySessionService` with a custom windowed variant that caps event history:
+Sessions are per-channel, with in-memory ADK sessions as the hot path and SQLite as persistent backing store:
 
 ```mermaid
 flowchart LR
     Msg([New message]) --> Get["Get or create\nADK session"]
-    Get --> Window["Session stores up to\n10 messages (events)"]
+    Get --> Cold{Session\nexists?}
+    Cold -->|No| Hydrate["Rehydrate from\nSQLite history"]
+    Cold -->|Yes| Window
+    Hydrate --> Window["Session stores up to\n10 messages (events)"]
     Window --> Timer["Reset 5-min\nidle timer"]
     Timer --> Idle{Idle for 5 min?}
-    Idle -->|Yes| Destroy["Destroy session\n(clean slate)"]
+    Idle -->|Yes| Destroy["Destroy in-memory\nsession"]
     Idle -->|No| Wait["Wait for\nnext message"]
+    Window --> Persist["Write-behind\nto SQLite"]
 ```
+
+SQLite tables:
+
+| Table              | Purpose                                    |
+| ------------------ | ------------------------------------------ |
+| `session_history`  | Conversation messages for rehydration      |
+| `user_memory`      | Per-user facts (max 10 per user)           |
+| `reminders`        | Scheduled reminders with delivery tracking |
+| `game_scores`      | Shiritori and hangman scores               |
+| `gacha_collection` | Per-user gacha item collection             |
+| `gacha_daily`      | Daily draw limit tracking                  |
 
 </details>
 
 <details>
 <summary><strong>Tone Detection</strong></summary>
 
-The tone detector evaluates the last 3 user messages against priority-ordered regular expressions, requiring at least 2 pattern matches to trigger a specific tone (zero LLM cost). Falls back to playful if no thresholds are met.
+The tone detector evaluates the last 3 user messages against priority-ordered regular expressions, requiring at least 2 pattern matches to trigger a specific tone (zero LLM cost). The `sleepy` tone has a special late-night trigger (22:00-04:00) that lowers the threshold to 1 match. Falls back to playful if no thresholds are met.
 
 ```mermaid
 flowchart LR
@@ -153,22 +190,59 @@ flowchart LR
     P1 -->|Yes| R1([Flustered])
     P1 -->|No| P2{Tender?}
     P2 -->|Yes| R2([Tender])
-    P2 -->|No| P3{... priority cascade}
-    P3 --> P7{Confident?}
-    P7 -->|Yes| R7([Confident])
-    P7 -->|No| Default([Playful])
+    P2 -->|No| P3{Annoyed?}
+    P3 -->|Yes| R3([Annoyed])
+    P3 -->|No| P4{Sleepy?}
+    P4 -->|"Yes (or 1 match + late night)"| R4([Sleepy])
+    P4 -->|No| P5{... priority cascade}
+    P5 --> P11{Confident?}
+    P11 -->|Yes| R11([Confident])
+    P11 -->|No| Default([Playful])
 ```
 
-| Tone      | Color              | Expression Pool                   |
-| --------- | ------------------ | --------------------------------- |
-| Playful   | `#FFB3D9` pink     | smile, cheerful, delighted        |
-| Sincere   | `#A8D8FF` blue     | sad, downcast, melancholy         |
-| Domestic  | `#FFD4B5` peach    | gentle smile, content, serene     |
-| Flustered | `#FFB3B3` red      | flustered, nervous, awkward       |
-| Curious   | `#B2EBF2` cyan     | thinking, surprised, blank stare  |
-| Annoyed   | `#F8B4B8` rose     | exasperated, frustrated, resigned |
-| Tender    | `#E1BEE7` lavender | worried, troubled, gentle smile   |
-| Confident | `#C8E6C9` mint     | composed, explaining, attentive   |
+| Tone        | Color                | Expression Pool                   | Trigger                        |
+| ----------- | -------------------- | --------------------------------- | ------------------------------ |
+| Playful     | `#FFB3D9` pink       | smile, cheerful, delighted        | Default fallback               |
+| Sincere     | `#A8D8FF` blue       | sad, downcast, melancholy         | Emotional keywords             |
+| Domestic    | `#FFD4B5` peach      | gentle smile, content, serene     | Food/cooking/home keywords     |
+| Flustered   | `#FFB3B3` red        | flustered, nervous, awkward       | Romantic keywords              |
+| Curious     | `#B2EBF2` cyan       | thinking, surprised, blank stare  | Question words                 |
+| Annoyed     | `#F8B4B8` rose       | exasperated, frustrated, resigned | Defiance/recklessness keywords |
+| Tender      | `#E1BEE7` lavender   | worried, troubled, gentle smile   | Soft vulnerability keywords    |
+| Confident   | `#C8E6C9` mint       | composed, explaining, attentive   | Help/advice/trust keywords     |
+| Nostalgic   | `#D4A574` amber      | gentle smile, melancholy, serene  | Memory/past keywords           |
+| Mischievous | `#FFD700` gold       | delighted, cheerful, smile        | Scheming/prank keywords        |
+| Sleepy      | `#B0C4DE` steel blue | relieved, content, gentle smile   | Sleep keywords + late night    |
+| Competitive | `#FF6B6B` fiery red  | cheerful, delighted, attentive    | Game/challenge keywords        |
+
+</details>
+
+<details>
+<summary><strong>Mini-Games</strong></summary>
+
+Three built-in mini-games with slash command interfaces:
+
+```mermaid
+flowchart TD
+    Slash(["/shiritori, /gacha, /hangman"]) --> Router["Game Command\nRouter"]
+    Router --> S["Shiritori\n(word chain)"]
+    Router --> G["Gacha\n(daily draw)"]
+    Router --> H["Hangman\n(word guess)"]
+    S --> State["In-memory\ngame state"]
+    H --> State
+    G --> DB[("SQLite\ncollections")]
+    State --> Scores["Save scores\nto SQLite"]
+```
+
+| Game      | Command      | Description                                                                                                   |
+| --------- | ------------ | ------------------------------------------------------------------------------------------------------------- |
+| Shiritori | `/shiritori` | Word chain game. Each word must start with the last letter of the previous. Multi-player, turn-based, scored. |
+| Gacha     | `/gacha`     | Daily fortune draw with 4 rarity tiers (common/uncommon/rare/legendary). Persistent collection tracking.      |
+| Hangman   | `/hangman`   | Classic word guessing with ~120 anime/VN/Japanese-culture terms. 6 lives, emoji gallows art.                  |
+
+- Gacha can also be triggered via @mention with keywords: `gacha`, `draw`, `fortune`, `omikuji`
+- Shiritori and hangman have 120-second auto-timeout per turn
+- Scores persist to SQLite across restarts
 
 </details>
 
@@ -181,13 +255,13 @@ rokabot/
 │   ├── index.ts                       # Entry point, signal handling, graceful shutdown
 │   ├── config.ts                      # Config loader (.env secrets + config.yml tunables)
 │   ├── agent/
-│   │   ├── roka.ts                    # ADK LlmAgent + Runner, session management
-│   │   ├── toneDetector.ts            # Rule-based tone detection (keyword matching)
+│   │   ├── roka.ts                    # ADK LlmAgent + Runner, session management, SQLite integration
+│   │   ├── toneDetector.ts            # Rule-based tone detection (keyword matching, 12 tones)
 │   │   ├── promptAssembler.ts         # 4-layer prompt combiner
 │   │   ├── prompts/
-│   │   │   ├── core.ts                # Layer 0: Core identity & personality
+│   │   │   ├── core.ts                # Layer 0: Core identity, personality, abilities
 │   │   │   ├── speech.ts              # Layer 1: Speech patterns & formatting rules
-│   │   │   ├── tones.ts               # Layer 2: Tone variants (8 moods)
+│   │   │   ├── tones.ts               # Layer 2: Tone variants (12 moods)
 │   │   │   └── context.ts             # Layer 3: Dynamic context (time, participants)
 │   │   └── tools/
 │   │       ├── index.ts               # ADK FunctionTool declarations (Zod schemas)
@@ -198,34 +272,61 @@ rokabot/
 │   │       ├── getAnimeSchedule.ts    # Jikan schedule (day/week/season scope)
 │   │       ├── getWeather.ts          # Open-Meteo weather lookup
 │   │       ├── searchWeb.ts           # Tavily web search (fallback)
+│   │       ├── rememberUser.ts        # Remember a fact about a user (SQLite)
+│   │       ├── recallUser.ts          # Recall stored facts about a user (SQLite)
+│   │       ├── setReminder.ts         # Set a timed reminder for a user (SQLite)
 │   │       └── jikanThrottle.ts       # Jikan API rate limiter (3 req/s)
 │   ├── discord/
 │   │   ├── client.ts                  # discord.js client setup (intents, partials)
 │   │   ├── concurrency.ts             # Per-channel concurrency guard
+│   │   ├── emojiReactor.ts            # Passive emoji reactions (rule-based, probability-gated)
+│   │   ├── reminderScheduler.ts       # 60-second interval reminder delivery
 │   │   ├── responses.ts               # In-character message pools
+│   │   ├── messageBuilder.ts          # Components V2 message builder
+│   │   ├── expressions.ts             # Tone → expression mapping
+│   │   ├── toneStyles.ts              # Tone → color/image mapping
 │   │   ├── commands/
 │   │   │   ├── chat.ts                # /chat slash command
-│   │   │   └── tools.ts              # Tool slash commands (/anime, /schedule, etc.)
+│   │   │   ├── tools.ts               # Tool slash commands (/anime, /schedule, etc.)
+│   │   │   └── games.ts               # Game slash commands (/shiritori, /gacha, /hangman)
 │   │   └── events/
 │   │       ├── ready.ts               # Bot login, command registration
 │   │       ├── interactionCreate.ts   # Slash command router
-│   │       ├── messageCreate.ts       # @mention and reply handler
-│   │       └── toolCommands.ts        # Tool command handlers + pagination
+│   │       ├── messageCreate.ts       # @mention and reply handler + passive reactions
+│   │       ├── toolCommands.ts        # Tool command handlers + pagination
+│   │       ├── gameCommands.ts        # Game command handlers (shiritori, gacha, hangman)
+│   │       └── gachaMention.ts        # Gacha @mention keyword handler
+│   ├── games/
+│   │   ├── shiritori.ts               # Shiritori game state manager
+│   │   ├── gacha.ts                   # Gacha draw system (weighted rarity, daily limit)
+│   │   ├── hangman.ts                 # Hangman game state manager
+│   │   └── data/
+│   │       ├── wordlist.json          # ~5700 English words for shiritori validation
+│   │       ├── gachaItems.ts          # 43 collectible items across 4 rarity tiers
+│   │       └── hangmanWords.ts        # ~120 anime/VN/Japanese-culture terms with hints
+│   ├── storage/
+│   │   ├── database.ts                # SQLite initialization, schema, singleton
+│   │   ├── sessionStore.ts            # Session history persistence (write-behind, load)
+│   │   ├── userMemory.ts              # Per-user fact storage (CRUD, 10-fact cap)
+│   │   └── reminderStore.ts           # Reminder CRUD (5-reminder cap per user)
 │   ├── session/
-│   │   └── types.ts                   # WindowMessage & ChannelSession interfaces
+│   │   ├── types.ts                   # WindowMessage & ChannelSession interfaces
+│   │   ├── messageWindow.ts           # FIFO message window
+│   │   └── sessionManager.ts          # Session lifecycle manager
 │   └── utils/
 │       ├── logger.ts                  # pino structured logger
 │       └── rateLimiter.ts             # Token bucket (RPM) + daily counter (RPD)
 ├── scripts/
 │   ├── test-chat.ts                   # CLI test script for rapid prompt iteration
-│   └── test-adk-smoke.ts             # Automated ADK smoke test
+│   ├── test-adk-smoke.ts              # Automated ADK smoke test (tools, response quality)
+│   └── test-features.ts              # Phase 7 feature integration test
 ├── assets/
 │   ├── roka-character-bible.md        # Comprehensive character reference
 │   └── app-icon.jpg                   # Bot avatar
 ├── config.yml                         # Tunable configuration (non-secret)
 ├── .env.example                       # Environment variable template
 ├── Dockerfile                         # Multi-stage build (build + slim runtime)
-├── docker-compose.yml                 # Single service, 512 MB mem cap, log rotation
+├── docker-compose.yml                 # Single service, 512 MB mem cap, log rotation, SQLite volume
 ├── tsconfig.json                      # TypeScript compiler config
 ├── .eslintrc.cjs                      # ESLint config
 ├── .prettierrc                        # Prettier config
@@ -246,9 +347,10 @@ rokabot/
 | Discord         | discord.js v14        | Guilds, GuildMessages, MessageContent intents |
 | Agent Framework | @google/adk           | LlmAgent + Runner with FunctionTools          |
 | LLM             | Gemini 3.1 Flash Lite | `gemini-3.1-flash-lite-preview`               |
+| Database        | better-sqlite3        | Synchronous SQLite for persistence            |
 | Validation      | Zod                   | Tool parameter schemas                        |
 | Logging         | pino                  | Structured JSON, pino-pretty in dev           |
-| Testing         | vitest                | TypeScript-native                             |
+| Testing         | vitest                | 317 tests, TypeScript-native                  |
 | Deployment      | Docker Compose        | Multi-stage build, node:24-alpine             |
 
 ---
@@ -329,7 +431,7 @@ Secrets live in `.env`, tunables live in `config.yml`.
 | `session.ttl`              | `SESSION_TTL_MS`             | `300000`                        | Idle session TTL (ms)             |
 | `session.windowSize`       | `SESSION_WINDOW_SIZE`        | `10`                            | FIFO message window size          |
 | `discord.maxMessageLength` | `DISCORD_MAX_MESSAGE_LENGTH` | `2000`                          | Discord message char limit        |
-| `timezone`                 | `TZ`                         | —                               | IANA timezone (e.g. `Asia/Tokyo`) |
+| `timezone`                 | `TZ`                         | --                              | IANA timezone (e.g. `Asia/Tokyo`) |
 | `logging.level`            | `LOG_LEVEL`                  | `info`                          | Log level (debug/info/warn/error) |
 
 ---
@@ -342,6 +444,7 @@ npm run dev            # Start with tsx watch (hot reload)
 npm run dev:quiet      # Same, but suppresses verbose ADK event logs
 npm run test:chat      # CLI chat test (no Discord needed)
 npm run test:smoke     # Automated ADK smoke test
+npm run test:features  # Phase 7 feature integration test
 
 # Build & Run
 npm run build          # Compile TypeScript to dist/
@@ -351,7 +454,7 @@ npm start              # Run compiled JS (production)
 npm run lint           # ESLint
 npm run format         # Prettier (write)
 npm run format:check   # Prettier (check only)
-npm test               # Run all tests
+npm test               # Run all tests (317 tests)
 npm run test:watch     # Tests in watch mode
 
 # Docker
@@ -364,16 +467,17 @@ docker compose logs -f # Tail logs
 
 ## Docker Deployment
 
-The Dockerfile uses a multi-stage build: stage 1 compiles TypeScript with all dev dependencies, stage 2 copies only the compiled output and production dependencies into a slim `node:24-alpine` image. Builds natively on ARM64 (Raspberry Pi 5) with no cross-compilation needed.
+The Dockerfile uses a multi-stage build: stage 1 compiles TypeScript with all dev dependencies, stage 2 copies only the compiled output and production dependencies into a slim `node:24-alpine` image. Builds natively on ARM64 (Raspberry Pi 5) with no cross-compilation needed. SQLite data is persisted via a Docker volume mount.
 
-| Setting          | Value             |
-| ---------------- | ----------------- |
-| Base image       | `node:24-alpine`  |
-| Memory limit     | 512 MB            |
-| Measured runtime | ~46 MB            |
-| Restart policy   | `unless-stopped`  |
-| Log rotation     | 10 MB x 3 files   |
-| Process user     | `node` (non-root) |
+| Setting          | Value                          |
+| ---------------- | ------------------------------ |
+| Base image       | `node:24-alpine`               |
+| Memory limit     | 512 MB                         |
+| Measured runtime | ~46 MB                         |
+| Restart policy   | `unless-stopped`               |
+| Log rotation     | 10 MB x 3 files                |
+| Process user     | `node` (non-root)              |
+| Data persistence | `./data:/app/data` (SQLite DB) |
 
 ```bash
 # Build and start (first time or after code changes)

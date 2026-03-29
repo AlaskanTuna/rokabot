@@ -125,14 +125,9 @@ describe('shiritori', () => {
       startGame('ch-1', 'Alice')
       joinGame('ch-1', 'Bob')
 
-      // Start the game by making a move
+      // Directly mark game as started (avoids flakiness from random starter word)
       const game = getGame('ch-1')!
-      const lastLetter = game.currentWord[game.currentWord.length - 1]
-      // Find a word from dictionary that starts with the last letter
-      const validWord = [...TEST_DICTIONARY].find((w) => w[0] === lastLetter && !game.usedWords.has(w))
-      if (validWord) {
-        submitWord('ch-1', 'Alice', validWord)
-      }
+      game.started = true
 
       const result = joinGame('ch-1', 'Charlie')
       expect(result.success).toBe(false)
