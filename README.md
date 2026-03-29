@@ -225,7 +225,7 @@ All 33 character expressions are assigned uniquely across tones — no expressio
 Roka remembers facts about individual users across sessions. This system is built on two ADK tools (`remember_user` and `recall_user`) backed by SQLite, plus automatic fact injection into the system prompt.
 
 ```mermaid
-flowchart TD
+flowchart LR
     User([User sends message]) --> Fetch["Fetch user facts\nfrom SQLite"]
     Fetch --> Inject{"Facts exist?"}
     Inject -->|Yes| Append["Append to system prompt:\n'You remember about Alice:\nshe prefers Ali, likes Frieren...'"]
