@@ -1,10 +1,16 @@
-// Suppress verbose ADK event dumps when ADK_QUIET is set (must run before any imports)
+// Suppress verbose ADK console output when ADK_QUIET is set (must run before any imports)
 if (process.env.ADK_QUIET) {
   const originalInfo = console.info
+  const originalLog = console.log
   console.info = (...args: unknown[]) => {
     const joined = args.map(String).join(' ')
-    if (joined.includes('[ADK INFO]') && joined.includes('event:')) return
+    if (joined.includes('[ADK INFO]')) return
     originalInfo(...args)
+  }
+  console.log = (...args: unknown[]) => {
+    const joined = args.map(String).join(' ')
+    if (joined.includes('[ADK INFO]')) return
+    originalLog(...args)
   }
 }
 
