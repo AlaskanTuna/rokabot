@@ -4,6 +4,7 @@
  */
 
 import { getDb } from './database.js'
+import { logger } from '../utils/logger.js'
 
 const MAX_ACTIVE_REMINDERS_PER_USER = 5
 
@@ -71,12 +72,24 @@ export function createReminder(
 
 /**
  * Get all reminders where due_at <= now and delivered = 0.
+ * Reminders more than 5 minutes past due are silently dropped (marked delivered).
  */
 export function getDueReminders(): DueReminder[] {
   const db = getDb()
+  const now = Date.now()
+  const staleThreshold = now - 5 * 60 * 1000
+
+  // Drop stale reminders (past due by more than 5 minutes)
+  const stale = db
+    .prepare('UPDATE reminders SET delivered = 1 WHERE delivered = 0 AND due_at < ?')
+    .run(staleThreshold)
+  if (stale.changes > 0) {
+    logger.info({ dropped: stale.changes }, 'Dropped stale reminders (>5min past due)')
+  }
+
   const rows = db
     .prepare('SELECT id, user_id, channel_id, reminder FROM reminders WHERE delivered = 0 AND due_at <= ?')
-    .all(Date.now()) as Array<{
+    .all(now) as Array<{
     id: number
     user_id: string
     channel_id: string
