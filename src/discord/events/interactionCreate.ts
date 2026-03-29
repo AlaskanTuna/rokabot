@@ -65,6 +65,7 @@ export function createInteractionHandler(rateLimiter: RateLimiter, client?: Clie
         channelId,
         userMessage: message,
         displayName,
+        userId: interaction.user.id,
         imageAttachments: imageAttachments.length > 0 ? imageAttachments : undefined
       })
 

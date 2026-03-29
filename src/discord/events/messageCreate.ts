@@ -2,7 +2,7 @@ import type { Client, Message } from 'discord.js'
 import { DiscordAPIError } from 'discord.js'
 import { logger } from '../../utils/logger.js'
 import { RateLimiter } from '../../utils/rateLimiter.js'
-import { getRandomBusy, getRandomDecline, getRandomEmptyMention, getRandomError, splitResponse } from '../responses.js'
+import { getRandomBusy, getRandomDecline, getRandomError, splitResponse } from '../responses.js'
 import { buildRokaMessage } from '../messageBuilder.js'
 import { generateResponse, type ImageAttachment } from '../../agent/roka.js'
 import { isChannelBusy, markBusy, markFree } from '../concurrency.js'
@@ -157,9 +157,7 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
     }
 
     if (!content && imageAttachments.length === 0) {
-      logger.info({ channelId, trigger: isMentioned ? 'mention' : 'reply' }, 'Empty mention detected')
-      await message.reply(getRandomEmptyMention())
-      return
+      content = '(pinged you without saying anything)'
     }
 
     logger.info({ channelId, trigger: isMentioned ? 'mention' : 'reply' }, 'Message trigger detected')
@@ -199,6 +197,7 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
         channelId,
         userMessage: content || '(shared an image)',
         displayName,
+        userId: message.author.id,
         imageAttachments: imageAttachments.length > 0 ? imageAttachments : undefined
       })
 

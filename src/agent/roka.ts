@@ -26,6 +26,7 @@ interface GenerateOptions {
   channelId: string
   userMessage: string
   displayName: string
+  userId: string
   imageAttachments?: ImageAttachment[]
 }
 
@@ -300,7 +301,7 @@ function eventsToWindowMessages(events: Event[]): WindowMessage[] {
  * @returns Response text and detected tone
  */
 export async function generateResponse(options: GenerateOptions): Promise<GenerateResult> {
-  const { channelId, userMessage, displayName, imageAttachments } = options
+  const { channelId, userMessage, displayName, userId, imageAttachments } = options
 
   toolCallsThisRequest = []
 
@@ -320,13 +321,17 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
 
   // Inject per-user relationship memory into the system prompt
   try {
-    const userFacts = getAllFactsForPrompt(displayName)
+    const userFacts = getAllFactsForPrompt(userId)
     if (userFacts) {
       systemPrompt += `\n\n## What You Remember About ${displayName}\n- ${userFacts}`
     }
   } catch (error) {
-    logger.warn({ displayName, error }, 'Failed to load user memory for prompt injection')
+    logger.warn({ userId, error }, 'Failed to load user memory for prompt injection')
   }
+
+  systemPrompt +=
+    `\n\n- The current user's Discord ID is "${userId}".` +
+    ' Use this ID (not their name) when calling remember_user or recall_user tools.'
 
   logger.debug({ tone, participantCount: participants.length, hour }, 'Prompt assembled')
 
@@ -364,7 +369,7 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
         userId: channelId,
         sessionId: channelId,
         newMessage,
-        stateDelta: { _systemPrompt: systemPrompt, participants },
+        stateDelta: { _systemPrompt: systemPrompt, participants, _userId: userId },
         runConfig: { maxLlmCalls: 4 }
       })) {
         if (abortController.signal.aborted) break

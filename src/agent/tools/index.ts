@@ -131,7 +131,7 @@ export const rememberUserTool = new FunctionTool({
   description:
     'Remember a fact about a user. Use when someone shares personal details worth remembering — their name preference, favorite anime, hobbies, birthday, etc. Only store genuinely useful facts, not temporary conversation details.',
   parameters: z.object({
-    user_id: z.string().describe('The display name of the user'),
+    user_id: z.string().describe('The Discord user ID of the user (numeric string)'),
     fact_key: z.string().describe('A short label for the fact (e.g. "favorite_anime", "nickname", "birthday")'),
     fact_value: z.string().describe('The value of the fact (e.g. "Frieren", "Ali", "March 15")')
   }),
@@ -142,7 +142,7 @@ export const recallUserTool = new FunctionTool({
   name: 'recall_user',
   description: 'Recall stored facts about a user. Use when you want to check what you remember about someone.',
   parameters: z.object({
-    user_id: z.string().describe('The display name of the user')
+    user_id: z.string().describe('The Discord user ID of the user (numeric string)')
   }),
   execute: async (input) => recallUser(input)
 })
