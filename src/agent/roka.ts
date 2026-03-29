@@ -359,75 +359,99 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
     'Sending ADK request'
   )
 
-  try {
-    let responseText = ''
-    const abortController = new AbortController()
-    const timeoutId = setTimeout(() => abortController.abort(), config.gemini.timeout)
+  const MAX_RETRIES = 3
+  const BASE_DELAY_MS = 2000
 
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      for await (const event of runner.runAsync({
-        userId: channelId,
-        sessionId: channelId,
-        newMessage,
-        stateDelta: { _systemPrompt: systemPrompt, participants, _userId: userId, _channelId: channelId },
-        runConfig: { maxLlmCalls: 4 }
-      })) {
-        if (abortController.signal.aborted) break
-        if (isFinalResponse(event) && event.content?.parts) {
-          responseText = event.content.parts
-            .filter((p: Part) => p.text && !p.thought)
-            .map((p: Part) => p.text)
-            .join('')
-            .trim()
+      let responseText = ''
+      const abortController = new AbortController()
+      const timeoutId = setTimeout(() => abortController.abort(), config.gemini.timeout)
+
+      try {
+        for await (const event of runner.runAsync({
+          userId: channelId,
+          sessionId: channelId,
+          newMessage,
+          stateDelta: { _systemPrompt: systemPrompt, participants, _userId: userId, _channelId: channelId },
+          runConfig: { maxLlmCalls: 4 }
+        })) {
+          if (abortController.signal.aborted) break
+          if (isFinalResponse(event) && event.content?.parts) {
+            responseText = event.content.parts
+              .filter((p: Part) => p.text && !p.thought)
+              .map((p: Part) => p.text)
+              .join('')
+              .trim()
+          }
+        }
+      } finally {
+        clearTimeout(timeoutId)
+      }
+
+      if (abortController.signal.aborted && !responseText) {
+        logger.warn({ channelId }, 'Client-side timeout triggered for ADK runner')
+        responseText = getRandomFallback()
+      }
+
+      if (!responseText) {
+        responseText = getRandomFallback()
+      }
+
+      // Destroy session if a fallback response was returned to prevent corrupted history
+      // (e.g. ErrorRecoveryPlugin injecting model text after a functionCall turn)
+      if (KNOWN_FALLBACKS.has(responseText)) {
+        logger.warn({ channelId }, 'Fallback response detected, destroying session to prevent history corruption')
+        await destroySession(channelId)
+      }
+
+      // Log tool fallback chains when multiple tools were called in a single request
+      if (toolCallsThisRequest.length > 1) {
+        logger.info({ tools: toolCallsThisRequest }, 'Tool fallback chain detected')
+      }
+
+      // Write-behind: persist the exchange to SQLite (non-blocking — failures don't break the response)
+      if (!KNOWN_FALLBACKS.has(responseText)) {
+        try {
+          saveMessage(channelId, 'user', displayName, userMessage)
+          saveMessage(channelId, 'assistant', 'Roka', responseText)
+        } catch (error) {
+          logger.warn({ channelId, error }, 'Failed to persist messages to SQLite')
         }
       }
-    } finally {
-      clearTimeout(timeoutId)
-    }
 
-    if (abortController.signal.aborted && !responseText) {
-      logger.warn({ channelId }, 'Client-side timeout triggered for ADK runner')
-      responseText = getRandomFallback()
-    }
+      logger.debug({ responseLength: responseText.length }, 'ADK response extracted')
+      return { text: responseText, tone }
+    } catch (error) {
+      const errDetail =
+        error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error
 
-    if (!responseText) {
-      responseText = getRandomFallback()
-    }
+      // Check if this is a transient API error worth retrying
+      const errorMsg = error instanceof Error ? error.message : String(error)
+      const isTransient = /429|500|503|RESOURCE_EXHAUSTED|overloaded|quota|rate.limit|unavailable/i.test(errorMsg)
 
-    // Destroy session if a fallback response was returned to prevent corrupted history
-    // (e.g. ErrorRecoveryPlugin injecting model text after a functionCall turn)
-    if (KNOWN_FALLBACKS.has(responseText)) {
-      logger.warn({ channelId }, 'Fallback response detected, destroying session to prevent history corruption')
-      await destroySession(channelId)
-    }
-
-    // Log tool fallback chains when multiple tools were called in a single request
-    if (toolCallsThisRequest.length > 1) {
-      logger.info({ tools: toolCallsThisRequest }, 'Tool fallback chain detected')
-    }
-
-    // Write-behind: persist the exchange to SQLite (non-blocking — failures don't break the response)
-    if (!KNOWN_FALLBACKS.has(responseText)) {
-      try {
-        saveMessage(channelId, 'user', displayName, userMessage)
-        saveMessage(channelId, 'assistant', 'Roka', responseText)
-      } catch (error) {
-        logger.warn({ channelId, error }, 'Failed to persist messages to SQLite')
+      if (isTransient && attempt < MAX_RETRIES) {
+        const delayMs = BASE_DELAY_MS * Math.pow(2, attempt)
+        logger.warn(
+          { channelId, attempt: attempt + 1, maxRetries: MAX_RETRIES, delayMs, errorMessage: errorMsg },
+          'Transient API error, retrying with exponential backoff'
+        )
+        await new Promise((resolve) => setTimeout(resolve, delayMs))
+        continue
       }
+
+      logger.error({ error: errDetail, channelId, attempt: attempt + 1 }, 'ADK request failed')
+
+      // If session is corrupted or too large, destroy it so the next request starts fresh.
+      if (error instanceof SyntaxError) {
+        logger.warn({ channelId }, 'Session likely corrupted, destroying for recovery')
+        await destroySession(channelId)
+      }
+
+      throw error
     }
-
-    logger.debug({ responseLength: responseText.length }, 'ADK response extracted')
-    return { text: responseText, tone }
-  } catch (error) {
-    const errDetail = error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error
-    logger.error({ error: errDetail, channelId }, 'ADK request failed')
-
-    // If session is corrupted or too large, destroy it so the next request starts fresh.
-    if (error instanceof SyntaxError) {
-      logger.warn({ channelId }, 'Session likely corrupted, destroying for recovery')
-      await destroySession(channelId)
-    }
-
-    throw error
   }
+
+  // Should never reach here, but TypeScript needs it
+  throw new Error('Exhausted all retry attempts')
 }
