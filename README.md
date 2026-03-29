@@ -564,7 +564,7 @@ The Dockerfile uses a multi-stage build: stage 1 compiles TypeScript with all de
 docker compose up -d --build
 
 # View logs
-docker compose logs -f
+docker compose -f ~/rokabot/docker-compose.yml logs -f
 
 # Restart the bot
 docker compose restart
