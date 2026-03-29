@@ -15,6 +15,8 @@ import { getWeather } from '../../agent/tools/getWeather.js'
 import { searchAnime, type SearchAnimeParams } from '../../agent/tools/searchAnime.js'
 import { getAnimeSchedule } from '../../agent/tools/getAnimeSchedule.js'
 import { searchWeb } from '../../agent/tools/searchWeb.js'
+import { createReminder } from '../../storage/reminderStore.js'
+import { config } from '../../config.js'
 
 const PLAYFUL_COLOR = 0xffb3d9
 const CURIOUS_COLOR = 0xb2ebf2
@@ -41,7 +43,8 @@ const FLAVOR = {
     'I wonder what the weather is like there~',
     "Let's see~ checking the forecast!"
   ],
-  search: ['Let me look that up for you~', 'Hmm, good question! Let me check~', "One moment~ I'll search for that!"]
+  search: ['Let me look that up for you~', 'Hmm, good question! Let me check~', "One moment~ I'll search for that!"],
+  remind: ["I'll remember for you~", 'Leave it to me! \u266a', "I'll make sure you don't forget~"]
 }
 
 const ERROR_MESSAGES = [
@@ -416,7 +419,107 @@ async function handleWeather(interaction: ChatInputCommandInteraction) {
   return buildToolMessage(text, CURIOUS_COLOR)
 }
 
-const TOOL_COMMAND_NAMES = new Set(['roll_dice', 'flip_coin', 'time', 'anime', 'schedule', 'weather', 'search'])
+/** Parse a time string like "3:30pm", "14:00", "1am" into minutes from now. */
+function parseTimeString(input: string): number | null {
+  const tz = config.timezone ?? undefined
+
+  // Match patterns like "3pm", "3:30pm", "14:00", "1am"
+  const match = input.trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i)
+  if (!match) return null
+
+  let hours = parseInt(match[1], 10)
+  const mins = parseInt(match[2] || '0', 10)
+  const period = match[3]?.toLowerCase()
+
+  if (period === 'pm' && hours < 12) hours += 12
+  if (period === 'am' && hours === 12) hours = 0
+
+  if (hours < 0 || hours > 23 || mins < 0 || mins > 59) return null
+
+  // Get current time in configured timezone
+  const now = new Date()
+  let currentHours: number, currentMins: number
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      hour: 'numeric',
+      minute: 'numeric',
+      hour12: false,
+      timeZone: tz
+    })
+    const parts = formatter.format(now).split(':')
+    currentHours = parseInt(parts[0], 10)
+    currentMins = parseInt(parts[1], 10)
+  } catch {
+    currentHours = now.getHours()
+    currentMins = now.getMinutes()
+  }
+
+  const targetMinutes = hours * 60 + mins
+  const currentMinutes = currentHours * 60 + currentMins
+  let diff = targetMinutes - currentMinutes
+
+  if (diff <= 0) diff += 24 * 60 // next day
+
+  return diff
+}
+
+function handleRemind(interaction: ChatInputCommandInteraction) {
+  const message = interaction.options.getString('message', true)
+  const minutes = interaction.options.getInteger('minutes')
+  const atTime = interaction.options.getString('at')
+  const userId = interaction.user.id
+  const channelId = interaction.channelId
+
+  // Must specify either minutes or at
+  if (!minutes && !atTime) {
+    return buildToolMessage(
+      'You need to tell me **when** to remind you~ Use the `minutes` or `at` option!',
+      PLAYFUL_COLOR
+    )
+  }
+
+  let delayMinutes: number
+
+  if (minutes) {
+    delayMinutes = minutes
+  } else {
+    // Parse the "at" time string
+    const parsed = parseTimeString(atTime!)
+    if (!parsed) {
+      return buildToolMessage(
+        "Hmm, I couldn't understand that time~ Try something like `3:30pm`, `14:00`, or `1am`!",
+        PLAYFUL_COLOR
+      )
+    }
+    delayMinutes = parsed
+    if (delayMinutes <= 0) {
+      delayMinutes += 24 * 60 // Assume next day if the time has already passed today
+    }
+  }
+
+  const result = createReminder(userId, channelId, message, Date.now() + delayMinutes * 60 * 1000)
+
+  if (!result.success) {
+    return buildToolMessage(`Mou~ ${result.message}`, PLAYFUL_COLOR)
+  }
+
+  const flavor = randomFrom(FLAVOR.remind)
+  const dueTimestamp = Math.floor((Date.now() + delayMinutes * 60 * 1000) / 1000)
+  const text = `${flavor}\n\n\u23F0 **Reminder set!**\n"${message}"\n\nI'll remind you <t:${dueTimestamp}:R> (<t:${dueTimestamp}:t>)`
+
+  return buildToolMessage(text, PLAYFUL_COLOR)
+}
+
+const TOOL_COMMAND_NAMES = new Set([
+  'roll_dice',
+  'flip_coin',
+  'time',
+  'anime',
+  'schedule',
+  'weather',
+  'search',
+  'remind'
+])
 
 /** Create a dispatcher that routes tool slash commands to their respective handlers. */
 export function createToolCommandHandler(rateLimiter: RateLimiter) {
@@ -488,6 +591,11 @@ export function createToolCommandHandler(rateLimiter: RateLimiter) {
             lines.push('', "Hmm, I couldn't find anything for that~ Maybe try a different query?")
           }
           await interaction.editReply(buildToolMessage(lines.join('\n'), CURIOUS_COLOR))
+          break
+        }
+        case 'remind': {
+          const payload = handleRemind(interaction)
+          await interaction.reply(payload)
           break
         }
       }

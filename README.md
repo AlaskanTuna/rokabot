@@ -23,23 +23,15 @@ Rokabot responds to `/chat` slash commands, @mentions, and replies with in-chara
 
 ## Features
 
-- **Character roleplay** -- responds in-character as Maniwa Roka with personality-driven dialogue
-- **Multiple triggers** -- `/chat` slash command, @mentions, and reply detection
-- **Multimodal input** -- perceives images attached to messages (up to 4 MB each)
-- **12 dynamic tones** -- rule-based tone detection (zero LLM cost) adjusts personality across playful, sincere, domestic, flustered, curious, annoyed, tender, confident, nostalgic, mischievous, sleepy, and competitive moods
-- **10 agent tools** -- dice rolling, coin flip, timezone-aware clock, anime search, anime schedule, weather lookup, web search (Tavily), user memory (remember/recall), and reminders
-- **Standalone slash commands** -- `/roll_dice`, `/flip_coin`, `/time`, `/anime`, `/schedule`, `/weather`, `/search` with paginated results
-- **3 mini-games** -- `/shiritori` (word chain), `/gacha` (daily fortune draw), `/hangman` (anime-themed word guessing)
-- **Per-user memory** -- Roka remembers facts about users across sessions (nicknames, favorites, birthdays) via SQLite
-- **Reminders** -- users can ask Roka to remind them about things, delivered on schedule
-- **Passive emoji reactions** -- rule-based reactions to messages with contextual emoji, probability-gated and cooldown-limited
-- **SQLite persistence** -- conversation history, user memory, reminders, and game scores survive restarts
-- **Daily gacha collection** -- collectible fortune draws with 4 rarity tiers and persistent collection tracking
-- **Per-channel sessions** -- 10-message FIFO window with 5-minute idle TTL via ADK's InMemorySessionService
-- **Rate limiting** -- dual token-bucket (RPM) + daily counter (RPD) guard
-- **Concurrency guard** -- 1 active request per channel
-- **Tone-styled responses** -- Components V2 replies with accent colors and character expressions per tone
-- **Graceful shutdown** -- SIGTERM/SIGINT handling with session cleanup
+- **In-character roleplay** -- Maniwa Roka personality with 12 dynamic tones and Components V2 styled responses
+- **Multiple triggers** -- `/chat`, @mentions, replies, and image perception
+- **10 agent tools** -- dice, coin, clock, anime search, schedule, weather, web search, user memory, reminders
+- **3 mini-games** -- `/shiritori`, `/gacha`, `/hangman` with leaderboards and guides
+- **Per-user memory** -- remembers nicknames, favorites, and personal details across sessions
+- **Reminders** -- set via conversation or `/remind` command, with timezone-aware scheduling
+- **SQLite persistence** -- sessions, memory, reminders, and game scores survive restarts
+- **Passive emoji reactions** -- contextual emoji reactions on guild messages (probability-gated)
+- **Dynamic status** -- bot presence cycles based on time of day
 
 ---
 
@@ -108,18 +100,18 @@ flowchart LR
 
 Tools available to the agent:
 
-| Tool                 | Description                        | API                 |
-| -------------------- | ---------------------------------- | ------------------- |
-| `roll_dice`          | Roll NdM dice                      | Local               |
-| `flip_coin`          | Coin flip                          | Local               |
-| `get_current_time`   | Timezone-aware clock               | Local               |
-| `search_anime`       | Anime search with filters          | Jikan (MyAnimeList) |
-| `get_anime_schedule` | Airing schedule by day/week/season | Jikan (MyAnimeList) |
-| `get_weather`        | Current weather for a city         | Open-Meteo          |
-| `search_web`         | Web search (fallback tool)         | Tavily              |
-| `remember_user`      | Remember a fact about a user       | Local (SQLite)      |
-| `recall_user`        | Recall stored facts about a user   | Local (SQLite)      |
-| `set_reminder`       | Set a timed reminder for a user    | Local (SQLite)      |
+| Tool                 | Description               | Example                        | API        |
+| -------------------- | ------------------------- | ------------------------------ | ---------- |
+| `roll_dice`          | Roll NdM dice             | "Roll 2d20 for me"             | Local      |
+| `flip_coin`          | Coin flip                 | "Flip a coin"                  | Local      |
+| `get_current_time`   | Timezone-aware clock      | "What time is it in Tokyo?"    | Local      |
+| `search_anime`       | Anime search with filters | "Tell me about Frieren"        | Jikan      |
+| `get_anime_schedule` | Airing schedule           | "What anime airs on Friday?"   | Jikan      |
+| `get_weather`        | Current weather           | "How's the weather in London?" | Open-Meteo |
+| `search_web`         | Web search (fallback)     | "Latest One Piece news"        | Tavily     |
+| `remember_user`      | Remember user facts       | "My favorite anime is Frieren" | SQLite     |
+| `recall_user`        | Recall user facts         | "What do you know about me?"   | SQLite     |
+| `set_reminder`       | Timed reminders           | "Remind me to eat at 3pm"      | SQLite     |
 
 </details>
 

@@ -150,6 +150,22 @@ export const searchCommand = new SlashCommandBuilder()
   .setDescription('Search the web for current info!')
   .addStringOption((opt) => opt.setName('query').setDescription('What to search for').setRequired(true))
 
+export const remindCommand = new SlashCommandBuilder()
+  .setName('remind')
+  .setDescription('Ask Roka to remind you about something!')
+  .addStringOption((opt) => opt.setName('message').setDescription('What to remind you about').setRequired(true))
+  .addIntegerOption((opt) =>
+    opt
+      .setName('minutes')
+      .setDescription('Minutes from now (default: use the "at" option instead)')
+      .setRequired(false)
+      .setMinValue(1)
+      .setMaxValue(10080)
+  )
+  .addStringOption((opt) =>
+    opt.setName('at').setDescription('Time to remind you (e.g. "3:30pm", "14:00", "1am")').setRequired(false)
+  )
+
 export const toolCommands = [
   rollDiceCommand,
   flipCoinCommand,
@@ -157,5 +173,6 @@ export const toolCommands = [
   animeCommand,
   scheduleCommand,
   weatherCommand,
-  searchCommand
+  searchCommand,
+  remindCommand
 ]
