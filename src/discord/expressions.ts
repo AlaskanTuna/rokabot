@@ -7,18 +7,18 @@ import { logger } from '../utils/logger.js'
  * A random expression is selected from the pool for each message.
  */
 const TONE_EXPRESSIONS: Record<ToneKey, string[]> = {
-  playful: ['smile', 'cheerful', 'delighted'],
-  sincere: ['sad', 'downcast', 'somber', 'sorrowful', 'pained', 'melancholy'],
-  domestic: ['gentle_smile', 'content', 'serene', 'relieved'],
-  flustered: ['flustered', 'nervous', 'awkward', 'uncertain'],
-  curious: ['thinking', 'surprised', 'blank_stare', 'uncertain'],
-  annoyed: ['exasperated', 'dissatisfied', 'dissatisfied_2', 'dissatisfied_3', 'frustrated', 'resigned'],
-  tender: ['worried', 'troubled', 'anxious', 'gentle_smile', 'melancholy'],
-  confident: ['composed', 'base', 'explaining', 'attentive'],
-  nostalgic: ['gentle_smile', 'melancholy', 'content', 'serene'],
-  mischievous: ['delighted', 'cheerful', 'smile'],
-  sleepy: ['relieved', 'content', 'gentle_smile'],
-  competitive: ['cheerful', 'delighted', 'explaining', 'attentive']
+  playful: ['smile', 'cheerful'],
+  sincere: ['sad', 'pained', 'sorrowful'],
+  domestic: ['content', 'gentle_smile', 'relieved'],
+  flustered: ['flustered', 'nervous', 'awkward'],
+  curious: ['thinking', 'surprised', 'blank_stare'],
+  annoyed: ['exasperated', 'dissatisfied', 'dissatisfied_2'],
+  tender: ['worried', 'troubled', 'anxious'],
+  confident: ['composed', 'base', 'explaining'],
+  nostalgic: ['melancholy', 'downcast', 'somber'],
+  mischievous: ['delighted', 'attentive'],
+  sleepy: ['serene', 'resigned'],
+  competitive: ['frustrated', 'dissatisfied_3', 'uncertain']
 }
 
 /**

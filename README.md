@@ -200,20 +200,100 @@ flowchart LR
     P11 -->|No| Default([Playful])
 ```
 
-| Tone        | Color                | Expression Pool                   | Trigger                        |
-| ----------- | -------------------- | --------------------------------- | ------------------------------ |
-| Playful     | `#FFB3D9` pink       | smile, cheerful, delighted        | Default fallback               |
-| Sincere     | `#A8D8FF` blue       | sad, downcast, melancholy         | Emotional keywords             |
-| Domestic    | `#FFD4B5` peach      | gentle smile, content, serene     | Food/cooking/home keywords     |
-| Flustered   | `#FFB3B3` red        | flustered, nervous, awkward       | Romantic keywords              |
-| Curious     | `#B2EBF2` cyan       | thinking, surprised, blank stare  | Question words                 |
-| Annoyed     | `#F8B4B8` rose       | exasperated, frustrated, resigned | Defiance/recklessness keywords |
-| Tender      | `#E1BEE7` lavender   | worried, troubled, gentle smile   | Soft vulnerability keywords    |
-| Confident   | `#C8E6C9` mint       | composed, explaining, attentive   | Help/advice/trust keywords     |
-| Nostalgic   | `#D4A574` amber      | gentle smile, melancholy, serene  | Memory/past keywords           |
-| Mischievous | `#FFD700` gold       | delighted, cheerful, smile        | Scheming/prank keywords        |
-| Sleepy      | `#B0C4DE` steel blue | relieved, content, gentle smile   | Sleep keywords + late night    |
-| Competitive | `#FF6B6B` fiery red  | cheerful, delighted, attentive    | Game/challenge keywords        |
+| Tone        | Color                | Expression Pool                           | Trigger                        |
+| ----------- | -------------------- | ----------------------------------------- | ------------------------------ |
+| Playful     | `#FFB3D9` pink       | smile, cheerful                           | Default fallback               |
+| Sincere     | `#A8D8FF` blue       | sad, pained, sorrowful                    | Emotional keywords             |
+| Domestic    | `#FFD4B5` peach      | content, gentle smile, relieved           | Food/cooking/home keywords     |
+| Flustered   | `#FFB3B3` red        | flustered, nervous, awkward               | Romantic keywords              |
+| Curious     | `#B2EBF2` cyan       | thinking, surprised, blank stare          | Question words                 |
+| Annoyed     | `#F8B4B8` rose       | exasperated, dissatisfied, dissatisfied 2 | Defiance/recklessness keywords |
+| Tender      | `#E1BEE7` lavender   | worried, troubled, anxious                | Soft vulnerability keywords    |
+| Confident   | `#C8E6C9` mint       | composed, base, explaining                | Help/advice/trust keywords     |
+| Nostalgic   | `#D4A574` amber      | melancholy, downcast, somber              | Memory/past keywords           |
+| Mischievous | `#FFD700` gold       | delighted, attentive                      | Scheming/prank keywords        |
+| Sleepy      | `#B0C4DE` steel blue | serene, resigned                          | Sleep keywords + late night    |
+| Competitive | `#FF6B6B` fiery red  | frustrated, dissatisfied 3, uncertain     | Game/challenge keywords        |
+
+All 33 character expressions are assigned uniquely across tones — no expression appears in more than one pool.
+
+</details>
+
+<details>
+<summary><strong>Per-User Relationship Memory</strong></summary>
+
+Roka remembers facts about individual users across sessions. This system is built on two ADK tools (`remember_user` and `recall_user`) backed by SQLite, plus automatic fact injection into the system prompt.
+
+```mermaid
+flowchart TD
+    User([User sends message]) --> Fetch["Fetch user facts\nfrom SQLite"]
+    Fetch --> Inject{"Facts exist?"}
+    Inject -->|Yes| Append["Append to system prompt:\n'You remember about Alice:\nshe prefers Ali, likes Frieren...'"]
+    Inject -->|No| Skip["No injection"]
+    Append --> LLM["Send to Gemini\n(Roka has context)"]
+    Skip --> LLM
+    LLM --> Decide{"Roka decides\nsomething is worth\nremembering?"}
+    Decide -->|Yes| Tool["Calls remember_user tool\n(user_id, fact_key, fact_value)"]
+    Decide -->|No| Respond([Reply normally])
+    Tool --> SQLite[("SQLite\nuser_memory table")]
+    SQLite --> Respond
+```
+
+**How it works:**
+
+- When a user speaks, their stored facts are fetched from SQLite and appended to the system prompt (~50-100 tokens). Roka "just knows" these things without needing to call any tool.
+- During conversation, if Roka decides something is worth remembering (e.g., "call me Ali" or "I love Frieren"), she calls `remember_user` — the LLM decides when to use this, not a rule engine.
+- Facts are capped at 10 per user. When a new fact exceeds the cap, the oldest is evicted.
+- Facts persist across bot restarts via SQLite.
+
+| Aspect     | Detail                                                                 |
+| ---------- | ---------------------------------------------------------------------- |
+| Storage    | SQLite `user_memory` table (user_id, fact_key, fact_value, updated_at) |
+| Cap        | 10 facts per user, oldest evicted on overflow                          |
+| Injection  | Appended to system prompt at request time, ~50-100 tokens              |
+| Tools      | `remember_user` (save), `recall_user` (explicit recall)                |
+| Token cost | Near-zero — facts are short strings, no LLM calls for retrieval        |
+
+</details>
+
+<details>
+<summary><strong>Passive Emoji Reactions</strong></summary>
+
+Roka passively reacts to messages with contextually appropriate emoji, even when not directly addressed. This runs on every guild message with zero LLM cost — purely rule-based keyword matching with a probability gate and cooldown.
+
+```mermaid
+flowchart LR
+    Msg([Guild message]) --> Bot{From bot?}
+    Bot -->|Yes| Skip([Ignore])
+    Bot -->|No| Cooldown{Channel on\ncooldown?}
+    Cooldown -->|Yes| Skip
+    Cooldown -->|No| Match["Match content\nagainst 7 rule categories"]
+    Match --> Hit{Rule matched?}
+    Hit -->|No| Skip
+    Hit -->|Yes| Prob{"Random < 18%?"}
+    Prob -->|No| Skip
+    Prob -->|Yes| React["React with emoji\n(fire-and-forget)"]
+    React --> SetCD["Set 60s cooldown\nfor channel"]
+```
+
+**Reaction rules** (checked in priority order):
+
+| Category    | Keywords                                             | Emoji Pool     |
+| ----------- | ---------------------------------------------------- | -------------- |
+| Compliments | cute, pretty, beautiful, best girl, adorable, lovely | `💕`           |
+| Greetings   | good morning, ohayo, hello, konnichiwa, tadaima      | `👋`           |
+| Goodnight   | goodnight, oyasumi, going to sleep, good night       | `🌙`           |
+| Sadness     | sad, lonely, crying, feel bad, depressed             | `🫂`           |
+| Food        | cook, recipe, hungry, eat, delicious, food, dinner   | `🍳` `🍵` `🍙` |
+| Anime       | anime, manga, otaku, waifu, sensei, kawaii           | `✨` `🌸`      |
+| Excitement  | let's go, woohoo, amazing, awesome, yay, congrats    | `🎉` `✨`      |
+
+**Safeguards:**
+
+- **Probability gate**: only 18% chance of reacting even when a rule matches
+- **Cooldown**: max 1 reaction per channel per 60 seconds
+- **Bot-aware**: never reacts to bot messages
+- **Non-blocking**: reactions are fire-and-forget, never delay message handling
 
 </details>
 
