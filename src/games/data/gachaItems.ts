@@ -31,7 +31,7 @@ export const RARITY_EMOJI: Record<GachaRarity, string> = {
 }
 
 export const GACHA_ITEMS: GachaItem[] = [
-  // ── Common (22 items) ──────────────────────────────────────────────
+  // Common (22 items)
 
   {
     id: 'fortune_lucky',
@@ -184,7 +184,7 @@ export const GACHA_ITEMS: GachaItem[] = [
       'Someone might reach out to you today~ Or maybe you should reach out to them! Good friendships need a little watering, like plants!'
   },
 
-  // ── Uncommon (11 items) ────────────────────────────────────────────
+  // Uncommon (11 items)
 
   {
     id: 'trivia_hoori',
@@ -264,7 +264,7 @@ export const GACHA_ITEMS: GachaItem[] = [
       'On clear nights, I sometimes go up to the hill behind the shop to watch the stars~ The sky here is so clear... you can see the Milky Way!'
   },
 
-  // ── Rare (6 items) ────────────────────────────────────────────────
+  // Rare (6 items)
 
   {
     id: 'recipe_secret_dango',
@@ -309,7 +309,7 @@ export const GACHA_ITEMS: GachaItem[] = [
       'Our family has a special nerikiri recipe passed down for generations~ The trick is in how you knead the bean paste. I can show you... if you promise to keep it between us.'
   },
 
-  // ── Legendary (4 items) ───────────────────────────────────────────
+  // Legendary (4 items)
 
   {
     id: 'legend_first_meeting',

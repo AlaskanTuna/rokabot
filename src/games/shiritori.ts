@@ -59,7 +59,7 @@ const STARTER_WORDS = [
   'zebra'
 ]
 
-const TIMEOUT_MS = 120_000 // 2 minutes
+const TIMEOUT_MS = 60_000 // 1 minute
 
 let dictionary: Set<string> | null = null
 
@@ -90,7 +90,7 @@ function resetTimeout(game: ShiritoriGame): void {
 
   if (!game.active || !game.started || game.currentPlayerOrder.length < 2) return
 
-  game.timeoutAt = Math.floor(Date.now() / 1000) + 120
+  game.timeoutAt = Math.floor(Date.now() / 1000) + 60
   game.timeoutTimer = setTimeout(() => {
     handleTimeout(game)
   }, TIMEOUT_MS)

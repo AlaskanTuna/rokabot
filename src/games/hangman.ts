@@ -45,7 +45,7 @@ export interface GuessWordResult {
 }
 
 const INITIAL_LIVES = 6
-const TIMEOUT_MS = 120_000
+const TIMEOUT_MS = 60_000
 
 /** Active games keyed by channel ID. */
 const activeGames = new Map<string, HangmanGame>()
@@ -69,7 +69,7 @@ function resetTimer(game: HangmanGame): void {
   if (game.timeoutTimer) {
     clearTimeout(game.timeoutTimer)
   }
-  game.timeoutAt = Math.floor(Date.now() / 1000) + 120
+  game.timeoutAt = Math.floor(Date.now() / 1000) + 60
   game.timeoutTimer = setTimeout(() => {
     const word = game.word
     const channelId = game.channelId

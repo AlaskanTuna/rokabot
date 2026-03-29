@@ -80,9 +80,7 @@ export function getDueReminders(): DueReminder[] {
   const staleThreshold = now - 5 * 60 * 1000
 
   // Drop stale reminders (past due by more than 5 minutes)
-  const stale = db
-    .prepare('UPDATE reminders SET delivered = 1 WHERE delivered = 0 AND due_at < ?')
-    .run(staleThreshold)
+  const stale = db.prepare('UPDATE reminders SET delivered = 1 WHERE delivered = 0 AND due_at < ?').run(staleThreshold)
   if (stale.changes > 0) {
     logger.info({ dropped: stale.changes }, 'Dropped stale reminders (>5min past due)')
   }
