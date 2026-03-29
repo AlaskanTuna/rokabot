@@ -20,21 +20,21 @@ jobs:
       - name: Build and restart
         run: cd ~/rokabot && docker compose up -d --build
 
-      - name: Wait for container
-        run: sleep 8
-
       - name: Health check
-        id: health
         run: |
-          RESPONSE=$(curl -sf http://localhost:3000/ 2>/dev/null || echo '{"status":"unreachable"}')
-          echo "$RESPONSE" | python3 -m json.tool
-          STATUS=$(echo "$RESPONSE" | python3 -c "import sys,json;print(json.load(sys.stdin).get('status','unknown'))")
-          if [ "$STATUS" != "ok" ]; then
-            echo "Health check failed: $STATUS"
-            docker compose -f ~/rokabot/docker-compose.yml logs --tail 20
-            exit 1
-          fi
-          echo "Health check passed"
+          for i in $(seq 1 10); do
+            RESPONSE=$(curl -sf http://localhost:3000/ 2>/dev/null || echo '{"status":"unreachable"}')
+            STATUS=$(echo "$RESPONSE" | python3 -c "import sys,json;print(json.load(sys.stdin).get('status','unknown'))" 2>/dev/null)
+            if [ "$STATUS" = "ok" ]; then
+              echo "Health check passed (attempt $i)"
+              exit 0
+            fi
+            echo "Attempt $i: $STATUS — retrying in 5s..."
+            sleep 5
+          done
+          echo "Health check failed after 10 attempts"
+          docker compose -f ~/rokabot/docker-compose.yml logs --tail 20
+          exit 1
 
       - name: Notify Discord (success)
         if: success()
