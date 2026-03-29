@@ -201,6 +201,143 @@ function handleStats(interaction: ChatInputCommandInteraction) {
   return { embeds: [embed] }
 }
 
+// ── Guide handlers ──
+
+function handleHangmanGuide() {
+  return buildGameContainer({
+    accentColor: 0xb0c4de,
+    title: '\uD83C\uDFAF How to Play Hangman',
+    body: [
+      'Roka picks a secret word from her collection of anime, food, and Japanese culture terms. Your job is to guess it!',
+      '',
+      '**Commands:**',
+      '\u2022 `/hangman start` \u2014 Start a new game',
+      '\u2022 `/hangman guess <letter>` \u2014 Guess a single letter',
+      '\u2022 `/hangman guess <word>` \u2014 Guess the full word (risky!)',
+      '',
+      '**Rules:**',
+      '\u2022 You have **6 lives** \u2014 each wrong letter costs one',
+      '\u2022 Guessing the full word wrong also costs a life',
+      '\u2022 You have **2 minutes** per guess before time runs out',
+      '\u2022 The hint tells you the category~',
+      '',
+      '**Scoring:**',
+      '\u2022 Win = remaining lives as points (max 6)',
+      '\u2022 Lose = 0 points'
+    ].join('\n')
+  })
+}
+
+function handleShiritoriGuide() {
+  return buildGameContainer({
+    accentColor: 0xb0c4de,
+    title: '\uD83D\uDD17 How to Play Shiritori',
+    body: [
+      'Shiritori is a Japanese word chain game! Each word must start with the **last letter** of the previous word.',
+      '',
+      '**Commands:**',
+      '\u2022 `/shiritori start` \u2014 Start a new game',
+      '\u2022 `/shiritori join` \u2014 Join before the first move',
+      '\u2022 `/shiritori play <word>` \u2014 Submit your word',
+      '\u2022 `/shiritori scores` \u2014 View current scores',
+      '\u2022 `/shiritori end` \u2014 End the game early',
+      '',
+      '**Rules:**',
+      '\u2022 Words must be **real English words** (2+ letters)',
+      '\u2022 No repeating words already used',
+      '\u2022 Only the current player can submit (turns rotate)',
+      "\u2022 Take too long (2 min)? You're out!",
+      '\u2022 Need at least **2 players** to start',
+      '',
+      '**Scoring:**',
+      '\u2022 +1 point per valid word',
+      '\u2022 Last player standing wins!'
+    ].join('\n')
+  })
+}
+
+function handleGachaGuide() {
+  return buildGameContainer({
+    accentColor: 0xb0c4de,
+    title: '\uD83C\uDFB0 How Gacha Works',
+    body: [
+      "Draw a daily fortune from Roka's collection! Each draw gives you a random item with in-character commentary.",
+      '',
+      '**Commands:**',
+      "\u2022 `/gacha draw` \u2014 Draw today's fortune (1 per day)",
+      '\u2022 `/gacha collection` \u2014 View your collected items',
+      '\u2022 `/gacha stats` \u2014 See completion progress',
+      '',
+      '**Rarity Tiers:**',
+      '\u2022 \u26AA **Common** (60%) \u2014 Daily fortunes, cooking tips',
+      '\u2022 \uD83D\uDFE2 **Uncommon** (25%) \u2014 Seasonal messages, trivia',
+      '\u2022 \uD83D\uDD35 **Rare** (12%) \u2014 Secret recipes, personal stories',
+      '\u2022 \uD83C\uDF1F **Legendary** (3%) \u2014 Unique collectible moments',
+      '',
+      'You can also trigger a draw by mentioning Roka with "gacha", "draw", "fortune", or "omikuji"~'
+    ].join('\n')
+  })
+}
+
+// ── Leaderboard handler ──
+
+function handleLeaderboard(game: 'hangman' | 'shiritori', interaction: ChatInputCommandInteraction) {
+  const db = getDb()
+
+  const rows = db
+    .prepare(
+      `
+    SELECT user_id, SUM(score) as total_score, COUNT(*) as games_played
+    FROM game_scores
+    WHERE game = ?
+    GROUP BY user_id
+    ORDER BY total_score DESC
+    LIMIT 10
+  `
+    )
+    .all(game) as Array<{ user_id: string; total_score: number; games_played: number }>
+
+  if (rows.length === 0) {
+    return buildGameContainer({
+      accentColor: 0xb0c4de,
+      title: `${game === 'hangman' ? '\uD83C\uDFC6 Hangman' : '\uD83C\uDFC6 Shiritori'} Leaderboard`,
+      body: 'No scores recorded yet~ Be the first to play!'
+    })
+  }
+
+  const medals = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49']
+  const lines = rows.map((row, i) => {
+    const prefix = i < 3 ? medals[i] : `**${i + 1}.**`
+    return `${prefix} <@${row.user_id}> \u2014 **${row.total_score}** pts (${row.games_played} games)`
+  })
+
+  const userId = interaction.user.id
+  const userInTop = rows.some((r) => r.user_id === userId)
+  let footer: string | undefined
+  if (!userInTop) {
+    const userRow = db
+      .prepare(
+        `
+      SELECT SUM(score) as total_score, COUNT(*) as games_played
+      FROM game_scores
+      WHERE game = ? AND user_id = ?
+    `
+      )
+      .get(game, userId) as { total_score: number | null; games_played: number } | undefined
+
+    if (userRow?.total_score !== null && userRow?.total_score !== undefined) {
+      footer = `Your score: ${userRow.total_score} pts (${userRow.games_played} games)`
+    }
+  }
+
+  return buildGameContainer({
+    accentColor: 0xffd700,
+    title: `${game === 'hangman' ? '\uD83C\uDFC6 Hangman' : '\uD83C\uDFC6 Shiritori'} Leaderboard`,
+    body: lines.join('\n'),
+    footer
+  })
+}
+
 // ── Hangman helpers ──
 
 function buildHangmanBody(display: string, art: string, lives: number, timeoutAt?: number): string {
@@ -610,6 +747,11 @@ export function createGameCommandHandler(client?: Client) {
             await interaction.reply(payload)
             break
           }
+          case 'guide': {
+            const payload = handleGachaGuide()
+            await interaction.reply(payload)
+            break
+          }
         }
       } else if (commandName === 'hangman') {
         const subcommand = interaction.options.getSubcommand()
@@ -622,6 +764,16 @@ export function createGameCommandHandler(client?: Client) {
           }
           case 'guess': {
             const payload = handleHangmanGuess(interaction)
+            await interaction.reply(payload)
+            break
+          }
+          case 'guide': {
+            const payload = handleHangmanGuide()
+            await interaction.reply(payload)
+            break
+          }
+          case 'leaderboard': {
+            const payload = handleLeaderboard('hangman', interaction)
             await interaction.reply(payload)
             break
           }
@@ -652,6 +804,16 @@ export function createGameCommandHandler(client?: Client) {
           }
           case 'scores': {
             const payload = handleShiritoriScores(interaction)
+            await interaction.reply(payload)
+            break
+          }
+          case 'guide': {
+            const payload = handleShiritoriGuide()
+            await interaction.reply(payload)
+            break
+          }
+          case 'leaderboard': {
+            const payload = handleLeaderboard('shiritori', interaction)
             await interaction.reply(payload)
             break
           }
