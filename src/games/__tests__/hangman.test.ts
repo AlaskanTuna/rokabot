@@ -324,11 +324,11 @@ describe('game lifecycle', () => {
     expect(isGameActive('ch2')).toBe(false)
   })
 
-  it('game times out after 120 seconds of inactivity', () => {
+  it('game times out after 60 seconds of inactivity', () => {
     startGame('ch1', 'player1')
     expect(isGameActive('ch1')).toBe(true)
 
-    vi.advanceTimersByTime(120_000)
+    vi.advanceTimersByTime(60_000)
     expect(isGameActive('ch1')).toBe(false)
   })
 
@@ -337,19 +337,19 @@ describe('game lifecycle', () => {
     const game = getGame('ch1')!
     ;(game as { word: string }).word = 'ramen'
 
-    // Advance 100 seconds (less than timeout)
-    vi.advanceTimersByTime(100_000)
+    // Advance 50 seconds (less than 60s timeout)
+    vi.advanceTimersByTime(50_000)
     expect(isGameActive('ch1')).toBe(true)
 
     // Make a guess, which resets the timer
     guessLetter('ch1', 'r')
 
-    // Advance another 100 seconds — should still be active since timer was reset
-    vi.advanceTimersByTime(100_000)
+    // Advance another 50 seconds — should still be active since timer was reset
+    vi.advanceTimersByTime(50_000)
     expect(isGameActive('ch1')).toBe(true)
 
-    // Advance to trigger timeout
-    vi.advanceTimersByTime(20_001)
+    // Advance to trigger timeout (10s more = 60s total since last guess)
+    vi.advanceTimersByTime(10_001)
     expect(isGameActive('ch1')).toBe(false)
   })
 
