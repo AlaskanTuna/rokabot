@@ -17,7 +17,7 @@ export function startReminderScheduler(client: Client): void {
         const channel = await client.channels.fetch(reminder.channelId)
         if (channel && 'send' in channel) {
           await (channel as { send: (msg: string) => Promise<unknown> }).send(
-            `Hey **${reminder.userId}**~ you asked me to remind you: "${reminder.reminder}" \u266a`
+            `Hey <@${reminder.userId}>~ you asked me to remind you: "${reminder.reminder}" \u266a`
           )
           markDelivered(reminder.id)
           logger.info({ reminderId: reminder.id, userId: reminder.userId }, 'Reminder delivered')

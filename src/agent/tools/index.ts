@@ -150,14 +150,21 @@ export const recallUserTool = new FunctionTool({
 export const setReminderTool = new FunctionTool({
   name: 'set_reminder',
   description:
-    'Set a reminder for a user. Use when someone asks you to remind them about something. You can set reminders from 1 minute to 7 days in the future.',
+    'Set a reminder for the current user. Use when someone asks you to remind them about something. You can set reminders from 1 minute to 7 days in the future. The user and channel are filled in automatically.',
   parameters: z.object({
-    user_id: z.string().describe('Discord display name of the user to remind'),
-    channel_id: z.string().describe('The channel ID where the reminder was set'),
     reminder: z.string().describe('What to remind them about'),
     delay_minutes: z.number().describe('Minutes from now until the reminder (1-10080, i.e., up to 7 days)')
   }),
-  execute: async (input) => setReminder(input)
+  execute: async (input, toolContext) => {
+    const userId = toolContext?.state?.get<string>('_userId') ?? 'unknown'
+    const channelId = toolContext?.state?.get<string>('_channelId') ?? 'unknown'
+    return setReminder({
+      user_id: userId,
+      channel_id: channelId,
+      reminder: input.reminder,
+      delay_minutes: input.delay_minutes
+    })
+  }
 })
 
 /** All tool instances registered with the Roka LlmAgent. */
