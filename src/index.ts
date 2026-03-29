@@ -22,6 +22,7 @@ import { destroyAllSessions } from './agent/roka.js'
 import { closeDb } from './storage/database.js'
 import { startReminderScheduler, stopReminderScheduler } from './discord/reminderScheduler.js'
 import { destroyAllGames as destroyAllShiritoriGames } from './games/shiritori.js'
+import { stopStatusCycler } from './discord/statusCycler.js'
 
 const client = createClient()
 
@@ -49,6 +50,7 @@ healthServer.listen(3000, '0.0.0.0')
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'Shutdown signal received')
 
+  stopStatusCycler()
   stopReminderScheduler()
   destroyAllShiritoriGames()
   await destroyAllSessions()
