@@ -120,6 +120,21 @@ const REACTION_RULES: ReactionRule[] = [
     ],
     emoji: ['🎉', '✨', '💯'],
     minMatches: 1
+  },
+  // Angry
+  {
+    patterns: [
+      /\bangry\b/i,
+      /\bfurious\b/i,
+      /\bmad\b/i,
+      /\bupset\b/i,
+      /\bbruh\b/i,
+      /\bpissed\b/i,
+      /\bwtf\b/i,
+      /\bsmh\b/i
+    ],
+    emoji: ['😠', '💢'],
+    minMatches: 1
   }
 ]
 
