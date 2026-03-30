@@ -9,26 +9,66 @@ interface ReactionRule {
 const REACTION_RULES: ReactionRule[] = [
   // Compliments (highest priority — Roka appreciates being noticed)
   {
-    patterns: [/\bcute\b/i, /\bpretty\b/i, /\bbeautiful\b/i, /\bbest girl\b/i, /\badorable\b/i, /\blovely\b/i],
-    emoji: ['💕'],
+    patterns: [
+      /\bcute\b/i,
+      /\bpretty\b/i,
+      /\bbeautiful\b/i,
+      /\bbest girl\b/i,
+      /\badorable\b/i,
+      /\blovely\b/i,
+      /\bgorgeous\b/i,
+      /\bperfect\b/i,
+      /\bflawless\b/i,
+      /\bamazing\b/i,
+      /\bwonderful\b/i,
+      /\bkawaii\b/i
+    ],
+    emoji: ['💕', '💖', '💗'],
     minMatches: 1
   },
   // Greetings
   {
-    patterns: [/\bgood morning\b/i, /\bohayo\b/i, /\bhello\b/i, /\bhi everyone\b/i, /\bkonnichiwa\b/i, /\btadaima\b/i],
+    patterns: [
+      /\bgood morning\b/i,
+      /\bohayo\b/i,
+      /\bhi\b/i,
+      /\bhello\b/i,
+      /\bhi everyone\b/i,
+      /\bkonnichiwa\b/i,
+      /\btadaima\b/i,
+      /\bgm\b/i
+    ],
     emoji: ['👋'],
     minMatches: 1
   },
   // Goodnight
   {
-    patterns: [/\bgoodnight\b/i, /\boyasumi\b/i, /\bgoing to sleep\b/i, /\bnighty night\b/i, /\bgood night\b/i],
+    patterns: [
+      /\bgoodnight\b/i,
+      /\boyasumi\b/i,
+      /\bgoing to sleep\b/i,
+      /\bnighty night\b/i,
+      /\bgood night\b/i,
+      /\bgn\b/i
+    ],
     emoji: ['🌙'],
     minMatches: 1
   },
   // Sadness
   {
-    patterns: [/\bsad\b/i, /\blonely\b/i, /\bcrying\b/i, /\bfeel bad\b/i, /\bdepressed\b/i, /\bhurting\b/i],
-    emoji: ['🫂'],
+    patterns: [
+      /\b:broken_heart:\b/i,
+      /\bsad\b/i,
+      /\blonely\b/i,
+      /\bcrying\b/i,
+      /\bfeel bad\b/i,
+      /\bdepressed\b/i,
+      /\bhurting\b/i,
+      /\btears\b/i,
+      /\bsorrow\b/i,
+      /\bunhappy\b/i
+    ],
+    emoji: ['🫂', '😢', '💔'],
     minMatches: 1
   },
   // Food/cooking
@@ -51,8 +91,18 @@ const REACTION_RULES: ReactionRule[] = [
   },
   // Anime/manga
   {
-    patterns: [/\banime\b/i, /\bmanga\b/i, /\botaku\b/i, /\bwaifu\b/i, /\bsensei\b/i, /\bsenpai\b/i, /\bkawaii\b/i],
-    emoji: ['✨', '🌸'],
+    patterns: [
+      /\banime\b/i,
+      /\bmanga\b/i,
+      /\botaku\b/i,
+      /\bwaifu\b/i,
+      /\bsensei\b/i,
+      /\bsenpai\b/i,
+      /\bkawaii\b/i,
+      /\bciallo\b/i,
+      /\bvn\b/i
+    ],
+    emoji: ['✨', '🌸', '💓'],
     minMatches: 1
   },
   // Excitement/celebration
@@ -64,15 +114,17 @@ const REACTION_RULES: ReactionRule[] = [
       /\bawesome\b/i,
       /\bincredible\b/i,
       /\byay\b/i,
-      /\bcongrats\b/i
+      /\bcongrats\b/i,
+      /\bgg\b/i,
+      /\bez\b/i
     ],
-    emoji: ['🎉', '✨'],
+    emoji: ['🎉', '✨', '💯'],
     minMatches: 1
   }
 ]
 
-const PROBABILITY = 0.18
-const COOLDOWN_MS = 60_000
+const PROBABILITY = 0.33
+const COOLDOWN_MS = 180_000
 
 const cooldowns = new Map<string, number>()
 

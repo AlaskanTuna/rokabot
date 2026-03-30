@@ -61,7 +61,7 @@ How a user message flows through the system and becomes a styled, in-character r
 ```mermaid
 flowchart LR
     Start([User message]) --> Reaction{"Passive emoji\nreaction?"}
-    Reaction -->|Maybe 18%| React["React with emoji"]
+    Reaction -->|Maybe 33%| React["React with emoji"]
     Reaction --> Guards{Rate limit +\nconcurrency OK?}
     Guards -->|No| Reject([Decline / busy])
     Guards -->|Yes| Gacha{Gacha keyword?}
@@ -262,7 +262,7 @@ flowchart LR
     Cooldown -->|No| Match["Match content\nagainst 7 rule categories"]
     Match --> Hit{Rule matched?}
     Hit -->|No| Skip
-    Hit -->|Yes| Prob{"Random < 18%?"}
+    Hit -->|Yes| Prob{"Random < 33%?"}
     Prob -->|No| Skip
     Prob -->|Yes| React["React with emoji\n(fire-and-forget)"]
     React --> SetCD["Set 60s cooldown\nfor channel"]
@@ -282,7 +282,7 @@ flowchart LR
 
 **Safeguards:**
 
-- **Probability gate**: only 18% chance of reacting even when a rule matches
+- **Probability gate**: only 33% chance of reacting even when a rule matches
 - **Cooldown**: max 1 reaction per channel per 60 seconds
 - **Bot-aware**: never reacts to bot messages
 - **Non-blocking**: reactions are fire-and-forget, never delay message handling
