@@ -15,20 +15,68 @@ export interface GetCurrentTimeResult {
 
 // Common city names mapped to IANA timezone identifiers
 const cityToTimezone: Record<string, string> = {
-  // Asia
+  // UTC / GMT
+  utc: 'UTC',
+  gmt: 'GMT',
+
+  // Southeast Asia
+  singapore: 'Asia/Singapore',
+  'kuala lumpur': 'Asia/Kuala_Lumpur',
+  kualalumpur: 'Asia/Kuala_Lumpur',
+  malaysia: 'Asia/Kuala_Lumpur',
+  penang: 'Asia/Kuala_Lumpur',
+  'johor bahru': 'Asia/Kuala_Lumpur',
+  johorbahru: 'Asia/Kuala_Lumpur',
+  ipoh: 'Asia/Kuala_Lumpur',
+  bangkok: 'Asia/Bangkok',
+  'chiang mai': 'Asia/Bangkok',
+  chiangmai: 'Asia/Bangkok',
+  phuket: 'Asia/Bangkok',
+  jakarta: 'Asia/Jakarta',
+  bali: 'Asia/Makassar',
+  manila: 'Asia/Manila',
+  cebu: 'Asia/Manila',
+  davao: 'Asia/Manila',
+  'ho chi minh city': 'Asia/Ho_Chi_Minh',
+  'ho chi minh': 'Asia/Ho_Chi_Minh',
+  hochiminh: 'Asia/Ho_Chi_Minh',
+  hanoi: 'Asia/Ho_Chi_Minh',
+  'phnom penh': 'Asia/Phnom_Penh',
+  phnompenh: 'Asia/Phnom_Penh',
+  yangon: 'Asia/Yangon',
+  vientiane: 'Asia/Vientiane',
+  brunei: 'Asia/Brunei',
+
+  // Japan
   tokyo: 'Asia/Tokyo',
   osaka: 'Asia/Tokyo',
   kyoto: 'Asia/Tokyo',
+  yokohama: 'Asia/Tokyo',
+  sapporo: 'Asia/Tokyo',
+  nagoya: 'Asia/Tokyo',
+  kobe: 'Asia/Tokyo',
+  fukuoka: 'Asia/Tokyo',
+  sendai: 'Asia/Tokyo',
+  hiroshima: 'Asia/Tokyo',
+  nara: 'Asia/Tokyo',
+  okinawa: 'Asia/Tokyo',
+  akihabara: 'Asia/Tokyo',
+  shibuya: 'Asia/Tokyo',
+  shinjuku: 'Asia/Tokyo',
+
+  // East Asia
   seoul: 'Asia/Seoul',
+  busan: 'Asia/Seoul',
   beijing: 'Asia/Shanghai',
   shanghai: 'Asia/Shanghai',
+  shenzhen: 'Asia/Shanghai',
+  guangzhou: 'Asia/Shanghai',
   'hong kong': 'Asia/Hong_Kong',
+  hongkong: 'Asia/Hong_Kong',
   taipei: 'Asia/Taipei',
-  singapore: 'Asia/Singapore',
-  malaysia: 'Asia/Kuala_Lumpur',
-  bangkok: 'Asia/Bangkok',
-  jakarta: 'Asia/Jakarta',
-  manila: 'Asia/Manila',
+  kaohsiung: 'Asia/Taipei',
+
+  // South Asia & Middle East
   mumbai: 'Asia/Kolkata',
   delhi: 'Asia/Kolkata',
   dubai: 'Asia/Dubai',
@@ -59,14 +107,21 @@ const cityToTimezone: Record<string, string> = {
 
   // Americas
   'new york': 'America/New_York',
+  newyork: 'America/New_York',
   'los angeles': 'America/Los_Angeles',
+  losangeles: 'America/Los_Angeles',
+  'san francisco': 'America/Los_Angeles',
+  sanfrancisco: 'America/Los_Angeles',
   chicago: 'America/Chicago',
   denver: 'America/Denver',
   toronto: 'America/Toronto',
   vancouver: 'America/Vancouver',
   'mexico city': 'America/Mexico_City',
+  mexicocity: 'America/Mexico_City',
   'sao paulo': 'America/Sao_Paulo',
+  saopaulo: 'America/Sao_Paulo',
   'buenos aires': 'America/Argentina/Buenos_Aires',
+  buenosaires: 'America/Argentina/Buenos_Aires',
 
   // Oceania & Africa
   sydney: 'Australia/Sydney',
