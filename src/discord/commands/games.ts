@@ -4,11 +4,13 @@ import { SlashCommandBuilder } from 'discord.js'
 
 export const gachaCommand = new SlashCommandBuilder()
   .setName('gacha')
-  .setDescription("Try Roka's daily fortune draw!")
-  .addSubcommand((sub) => sub.setName('draw').setDescription('Draw a fortune (1 per day)'))
-  .addSubcommand((sub) => sub.setName('collection').setDescription('View your collection'))
-  .addSubcommand((sub) => sub.setName('stats').setDescription('View collection stats'))
-  .addSubcommand((sub) => sub.setName('guide').setDescription('Learn how Gacha works'))
+  .setDescription('Meet your VN companion spirit~')
+  .addSubcommand((sub) => sub.setName('hatch').setDescription('Hatch your companion spirit for the first time!'))
+  .addSubcommand((sub) => sub.setName('view').setDescription('View your companion spirit'))
+  .addSubcommand((sub) => sub.setName('pet').setDescription('Interact with your companion~'))
+  .addSubcommand((sub) => sub.setName('stats').setDescription("View your companion's detailed stats"))
+  .addSubcommand((sub) => sub.setName('guide').setDescription('Learn about the companion system'))
+  .addSubcommand((sub) => sub.setName('leaderboard').setDescription('View top companions by stats'))
 
 export const hangmanCommand = new SlashCommandBuilder()
   .setName('hangman')

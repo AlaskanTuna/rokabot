@@ -1,60 +1,96 @@
 /**
- * Handle gacha draws triggered via @mention keywords.
- * Reuses the same draw logic as the /gacha slash command.
+ * Handle buddy pet view triggered via @mention keywords.
+ * Shows the user's companion spirit or tells them to hatch one.
  */
 
 import type { Message } from 'discord.js'
-import { EmbedBuilder } from 'discord.js'
+import {
+  ContainerBuilder,
+  SectionBuilder,
+  SeparatorBuilder,
+  TextDisplayBuilder,
+  ThumbnailBuilder
+} from '@discordjs/builders'
+import { MessageFlags } from 'discord.js'
 import { logger } from '../../utils/logger.js'
-import { drawItem, getCollectionStats } from '../../games/gacha.js'
-import { RARITY_COLORS, RARITY_EMOJI, getTotalItemCount } from '../../games/data/gachaItems.js'
+import { getBuddy, getSpeciesInfo } from '../../games/buddy.js'
+import {
+  RARITY_COLORS,
+  RARITY_EMOJI,
+  RARITY_PLACEHOLDER_COLORS,
+  STAT_NAMES,
+  type BuddyRarity
+} from '../../games/data/buddySpecies.js'
 
-const ALREADY_DRAWN_MESSAGES = [
-  'Mou~ you already drew today! Come back tomorrow for another try~ \u266A',
-  'You already used your draw for today~ Be patient! Good things come to those who wait~ \u266A',
-  "Fufu~ one per day is the rule! I'll have something nice waiting for you tomorrow~"
-]
-
-function randomFrom<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)]
+function statBar(value: number, max: number = 10): string {
+  const filled = '\u2588'.repeat(value)
+  const empty = '\u2591'.repeat(max - value)
+  return `${filled}${empty}`
 }
 
-/** Handle a gacha draw triggered by mention keywords. Returns true if handled. */
+function buddyThumbnailUrl(species: string, rarity: BuddyRarity): string {
+  const info = getSpeciesInfo(species)
+  const color = RARITY_PLACEHOLDER_COLORS[rarity]
+  const emoji = info?.emoji ?? '\u2753'
+  return `https://placehold.co/80x80/${color}/white?text=${encodeURIComponent(emoji)}`
+}
+
+/** Handle a gacha/buddy mention. Returns true if handled. */
 export async function handleGachaMention(message: Message): Promise<boolean> {
   const userId = message.author.id
 
   try {
-    const result = drawItem(userId)
+    const buddy = getBuddy(userId)
 
-    if (result.alreadyDrawnToday) {
-      await message.reply({ content: randomFrom(ALREADY_DRAWN_MESSAGES) })
+    if (!buddy) {
+      await message.reply({
+        content: "You don't have a companion spirit yet~ Use `/gacha hatch` to get one!"
+      })
       return true
     }
 
-    const emoji = RARITY_EMOJI[result.item.rarity]
-    const color = RARITY_COLORS[result.item.rarity]
-    const stats = getCollectionStats(userId)
-    const totalItems = getTotalItemCount()
+    const info = getSpeciesInfo(buddy.species)
+    const rarityEmoji = RARITY_EMOJI[buddy.rarity]
+    const shinyTag = buddy.shiny ? ' \u2728 **SHINY**' : ''
+    const hatDisplay = buddy.hat !== 'none' ? ` | Hat: ${buddy.hat}` : ''
 
-    const description = result.isNew
-      ? result.item.description
-      : `${result.item.description}\n\n*You already have this one~ Better luck tomorrow!*`
+    const lines = [
+      `${info?.emoji ?? ''} **${buddy.name ?? 'Unknown'}** ${rarityEmoji} ${buddy.rarity.toUpperCase()}${shinyTag}`,
+      `*${info?.name ?? buddy.species}*${hatDisplay} | Eyes: ${buddy.eyes}`,
+      ''
+    ]
 
-    const footerLabel = result.isNew ? 'New! \u2728' : 'Duplicate'
+    if (buddy.personality) {
+      lines.push(`> ${buddy.personality}`, '')
+    }
 
-    const embed = new EmbedBuilder()
-      .setTitle(`${emoji} ${result.item.name}`)
-      .setDescription(description)
-      .setColor(color)
-      .setFooter({
-        text: `${result.item.rarity.toUpperCase()} \u2022 ${footerLabel} \u2022 ${stats.total}/${totalItems} collected`
-      })
+    for (const { key, display } of STAT_NAMES) {
+      const val = buddy.stats[key] ?? 0
+      lines.push(`${display}  ${statBar(val)}  **${val}**/10`)
+    }
 
-    await message.reply({ embeds: [embed] })
+    const body = lines.join('\n')
+
+    const section = new SectionBuilder()
+      .addTextDisplayComponents(new TextDisplayBuilder().setContent(`### ${buddy.name}\n\n${body}`))
+      .setThumbnailAccessory(new ThumbnailBuilder({ media: { url: buddyThumbnailUrl(buddy.species, buddy.rarity) } }))
+
+    const container = new ContainerBuilder()
+      .setAccentColor(RARITY_COLORS[buddy.rarity])
+      .addSectionComponents(section)
+      .addSeparatorComponents(new SeparatorBuilder())
+      .addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(`-# Hatched on ${new Date(buddy.hatchedAt).toLocaleDateString('en-GB')}`)
+      )
+
+    await message.reply({
+      components: [container],
+      flags: MessageFlags.IsComponentsV2 as typeof MessageFlags.IsComponentsV2
+    })
     return true
   } catch (error) {
     const errDetail = error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error
-    logger.error({ error: errDetail, channelId: message.channelId }, 'Error handling gacha mention')
+    logger.error({ error: errDetail, channelId: message.channelId }, 'Error handling buddy mention')
     return false
   }
 }

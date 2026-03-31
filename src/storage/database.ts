@@ -76,6 +76,19 @@ function createTables(database: Database.Database): void {
       last_draw_date TEXT NOT NULL,
       PRIMARY KEY (user_id)
     );
+
+    CREATE TABLE IF NOT EXISTS buddy (
+      user_id TEXT PRIMARY KEY,
+      species TEXT NOT NULL,
+      rarity TEXT NOT NULL,
+      shiny INTEGER NOT NULL DEFAULT 0,
+      eyes TEXT NOT NULL,
+      hat TEXT NOT NULL,
+      name TEXT,
+      personality TEXT,
+      stats_json TEXT NOT NULL,
+      hatched_at INTEGER NOT NULL
+    );
   `)
 }
 

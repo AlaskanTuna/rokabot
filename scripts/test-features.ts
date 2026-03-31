@@ -24,7 +24,7 @@ import {
   getActiveReminders,
   countActiveReminders
 } from '../src/storage/reminderStore.js'
-import { drawItem, getCollection, getCollectionStats, resetDailyDraw } from '../src/games/gacha.js'
+import { generateBuddy, saveBuddy, getBuddy, getTopBuddies } from '../src/games/buddy.js'
 import {
   startGame as startHangman,
   guessLetter,
@@ -44,7 +44,7 @@ import {
 import { shouldReact, resetCooldowns } from '../src/discord/emojiReactor.js'
 import { detectTone } from '../src/agent/toneDetector.js'
 import type { WindowMessage } from '../src/session/types.js'
-import { GACHA_ITEMS } from '../src/games/data/gachaItems.js'
+import { SPECIES } from '../src/games/data/buddySpecies.js'
 import { HANGMAN_WORDS } from '../src/games/data/hangmanWords.js'
 
 // --- Test Harness ---
@@ -216,33 +216,52 @@ async function main() {
   const sixthAttempt = createReminder('capper', 'ch-1', 'Reminder 5 (should fail)', futureReminder)
   assert(!sixthAttempt.success, 'Reminder: 5 cap', 'Rejected 6th reminder', 'Should have been rejected')
 
-  // ─── Gacha ───
-  console.log('\n  --- Gacha ---')
+  // ─── Buddy Pet ───
+  console.log('\n  --- Buddy Pet ---')
 
-  assert(GACHA_ITEMS.length >= 40, 'Gacha: item catalog', `${GACHA_ITEMS.length} items`, `Only ${GACHA_ITEMS.length}`)
-
-  const rarities = new Set(GACHA_ITEMS.map((i) => i.rarity))
   assert(
-    rarities.has('common') && rarities.has('uncommon') && rarities.has('rare') && rarities.has('legendary'),
-    'Gacha: all rarities',
-    '4 rarity tiers present',
-    `Missing: ${['common', 'uncommon', 'rare', 'legendary'].filter((r) => !rarities.has(r as any))}`
+    SPECIES.length === 18,
+    'Buddy: species catalog',
+    `${SPECIES.length} species`,
+    `Expected 18, got ${SPECIES.length}`
   )
 
-  resetDailyDraw('gacha-tester')
-  const draw = drawItem('gacha-tester')
+  const rarities = new Set(SPECIES.map((s) => s.rarity))
   assert(
-    !draw.alreadyDrawnToday,
-    'Gacha: first draw',
-    `Drew: ${draw.item.name} (${draw.item.rarity})`,
-    'Already drawn?'
+    rarities.has('common') &&
+      rarities.has('uncommon') &&
+      rarities.has('rare') &&
+      rarities.has('epic') &&
+      rarities.has('legendary'),
+    'Buddy: all rarities',
+    '5 rarity tiers present',
+    `Missing: ${['common', 'uncommon', 'rare', 'epic', 'legendary'].filter((r) => !rarities.has(r as any))}`
   )
 
-  const secondDraw = drawItem('gacha-tester')
-  assert(secondDraw.alreadyDrawnToday, 'Gacha: daily limit', 'Blocked second draw', 'Should have been blocked')
+  const buddy1 = generateBuddy('buddy-tester-1')
+  assert(
+    !!buddy1.species && !!buddy1.name,
+    'Buddy: generate',
+    `${buddy1.name} the ${buddy1.species} (${buddy1.rarity})`,
+    'Generation failed'
+  )
 
-  const stats = getCollectionStats('gacha-tester')
-  assert(stats.total >= 0, 'Gacha: collection stats', `${stats.completion}`, 'Stats failed')
+  const buddy1b = generateBuddy('buddy-tester-1')
+  assert(
+    buddy1.species === buddy1b.species && buddy1.name === buddy1b.name,
+    'Buddy: deterministic',
+    'Same userId = same buddy',
+    'Not deterministic!'
+  )
+
+  saveBuddy(buddy1)
+  const loaded = getBuddy('buddy-tester-1')
+  assert(loaded !== null && loaded.species === buddy1.species, 'Buddy: save/load', 'Round-trip OK', 'Round-trip failed')
+
+  const buddy2 = generateBuddy('buddy-tester-2')
+  saveBuddy(buddy2)
+  const top = getTopBuddies(10)
+  assert(top.length >= 2, 'Buddy: leaderboard', `${top.length} entries`, 'Leaderboard failed')
 
   // ─── Hangman ───
   console.log('\n  --- Hangman ---')

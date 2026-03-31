@@ -14,29 +14,29 @@ vi.mock('../../storage/database.js', () => ({
   getDb: () => testDb
 }))
 
-import { drawItem, getCollection, getCollectionStats, resetDailyDraw, rollRarity } from '../gacha.js'
-import { GACHA_ITEMS, getItemsByRarity, getTotalItemCount } from '../data/gachaItems.js'
+import { mulberry32, hashString, generateBuddy, saveBuddy, getBuddy, getTopBuddies } from '../buddy.js'
+import { SPECIES, STAT_NAMES, RARITY_STAT_RANGE, type BuddyRarity } from '../data/buddySpecies.js'
 
 function createTestDb(): Database.Database {
   const db = new Database(':memory:')
   db.exec(`
-    CREATE TABLE IF NOT EXISTS gacha_collection (
-      user_id TEXT NOT NULL,
-      item_id TEXT NOT NULL,
-      obtained_at INTEGER NOT NULL,
-      PRIMARY KEY (user_id, item_id)
-    );
-
-    CREATE TABLE IF NOT EXISTS gacha_daily (
-      user_id TEXT NOT NULL,
-      last_draw_date TEXT NOT NULL,
-      PRIMARY KEY (user_id)
+    CREATE TABLE IF NOT EXISTS buddy (
+      user_id TEXT PRIMARY KEY,
+      species TEXT NOT NULL,
+      rarity TEXT NOT NULL,
+      shiny INTEGER NOT NULL DEFAULT 0,
+      eyes TEXT NOT NULL,
+      hat TEXT NOT NULL,
+      name TEXT,
+      personality TEXT,
+      stats_json TEXT NOT NULL,
+      hatched_at INTEGER NOT NULL
     );
   `)
   return db
 }
 
-describe('gacha', () => {
+describe('buddy pet system', () => {
   beforeEach(() => {
     testDb = createTestDb()
   })
@@ -45,266 +45,234 @@ describe('gacha', () => {
     testDb.close()
   })
 
-  describe('item catalog', () => {
-    it('has the expected number of items', () => {
-      expect(GACHA_ITEMS.length).toBeGreaterThanOrEqual(40)
+  describe('mulberry32 PRNG', () => {
+    it('produces deterministic output for the same seed', () => {
+      const rng1 = mulberry32(12345)
+      const rng2 = mulberry32(12345)
+
+      const seq1 = Array.from({ length: 10 }, () => rng1())
+      const seq2 = Array.from({ length: 10 }, () => rng2())
+
+      expect(seq1).toEqual(seq2)
     })
 
-    it('all items have required fields', () => {
-      for (const item of GACHA_ITEMS) {
-        expect(item.id).toBeTruthy()
-        expect(item.name).toBeTruthy()
-        expect(item.rarity).toMatch(/^(common|uncommon|rare|legendary)$/)
-        expect(item.description).toBeTruthy()
+    it('produces values between 0 and 1', () => {
+      const rng = mulberry32(42)
+      for (let i = 0; i < 1000; i++) {
+        const val = rng()
+        expect(val).toBeGreaterThanOrEqual(0)
+        expect(val).toBeLessThan(1)
       }
     })
 
-    it('all item ids are unique', () => {
-      const ids = GACHA_ITEMS.map((item) => item.id)
-      const unique = new Set(ids)
-      expect(unique.size).toBe(ids.length)
+    it('produces different sequences for different seeds', () => {
+      const rng1 = mulberry32(111)
+      const rng2 = mulberry32(222)
+
+      const seq1 = Array.from({ length: 5 }, () => rng1())
+      const seq2 = Array.from({ length: 5 }, () => rng2())
+
+      expect(seq1).not.toEqual(seq2)
+    })
+  })
+
+  describe('hashString', () => {
+    it('returns a consistent hash for the same input', () => {
+      expect(hashString('test-user-123')).toBe(hashString('test-user-123'))
     })
 
-    it('has items in each rarity tier', () => {
-      expect(getItemsByRarity('common').length).toBeGreaterThan(0)
-      expect(getItemsByRarity('uncommon').length).toBeGreaterThan(0)
-      expect(getItemsByRarity('rare').length).toBeGreaterThan(0)
-      expect(getItemsByRarity('legendary').length).toBeGreaterThan(0)
+    it('returns different hashes for different inputs', () => {
+      expect(hashString('user-a')).not.toBe(hashString('user-b'))
+    })
+  })
+
+  describe('generateBuddy', () => {
+    it('returns a valid buddy for a given userId', () => {
+      const buddy = generateBuddy('user-123')
+
+      expect(buddy.userId).toBe('user-123')
+      expect(buddy.species).toBeTruthy()
+      expect(['common', 'uncommon', 'rare', 'epic', 'legendary']).toContain(buddy.rarity)
+      expect(typeof buddy.shiny).toBe('boolean')
+      expect(buddy.eyes).toBeTruthy()
+      expect(buddy.hat).toBeTruthy()
+      expect(buddy.name).toBeTruthy()
+      expect(buddy.personality).toBeTruthy()
+      expect(Object.keys(buddy.stats)).toHaveLength(5)
+      expect(buddy.hatchedAt).toBeGreaterThan(0)
+    })
+
+    it('generates the same buddy for the same userId', () => {
+      const buddy1 = generateBuddy('deterministic-user')
+      const buddy2 = generateBuddy('deterministic-user')
+
+      expect(buddy1.species).toBe(buddy2.species)
+      expect(buddy1.rarity).toBe(buddy2.rarity)
+      expect(buddy1.shiny).toBe(buddy2.shiny)
+      expect(buddy1.eyes).toBe(buddy2.eyes)
+      expect(buddy1.hat).toBe(buddy2.hat)
+      expect(buddy1.name).toBe(buddy2.name)
+      expect(buddy1.stats).toEqual(buddy2.stats)
+    })
+
+    it('generates different buddies for different userIds', () => {
+      const buddy1 = generateBuddy('user-aaa')
+      const buddy2 = generateBuddy('user-zzz')
+
+      // At least one attribute should differ (statistically near-certain)
+      const same =
+        buddy1.species === buddy2.species &&
+        buddy1.rarity === buddy2.rarity &&
+        buddy1.eyes === buddy2.eyes &&
+        buddy1.hat === buddy2.hat &&
+        buddy1.name === buddy2.name
+      expect(same).toBe(false)
+    })
+
+    it('assigns a species that matches the rolled rarity', () => {
+      // Test with many users to cover different rarities
+      for (let i = 0; i < 50; i++) {
+        const buddy = generateBuddy(`rarity-check-${i}`)
+        const speciesInfo = SPECIES.find((s) => s.id === buddy.species)
+        expect(speciesInfo).toBeDefined()
+        expect(speciesInfo!.rarity).toBe(buddy.rarity)
+      }
+    })
+
+    it('generates stats within rarity floor/ceiling bounds', () => {
+      for (let i = 0; i < 50; i++) {
+        const buddy = generateBuddy(`stat-check-${i}`)
+        const range = RARITY_STAT_RANGE[buddy.rarity]
+        for (const { key } of STAT_NAMES) {
+          const val = buddy.stats[key]
+          expect(val).toBeGreaterThanOrEqual(range.floor)
+          expect(val).toBeLessThanOrEqual(range.max)
+        }
+      }
+    })
+
+    it('produces all 5 stats', () => {
+      const buddy = generateBuddy('stat-keys')
+      const expectedKeys = ['charm', 'wit', 'dere', 'drama', 'luck']
+      for (const key of expectedKeys) {
+        expect(buddy.stats[key]).toBeDefined()
+        expect(typeof buddy.stats[key]).toBe('number')
+      }
+    })
+  })
+
+  describe('shiny probability', () => {
+    it('approximately 1% of buddies are shiny (statistical)', () => {
+      let shinyCount = 0
+      const total = 10000
+      for (let i = 0; i < total; i++) {
+        const buddy = generateBuddy(`shiny-test-${i}`)
+        if (buddy.shiny) shinyCount++
+      }
+      // Expect between 0.2% and 3% (generous bounds for randomness)
+      const rate = shinyCount / total
+      expect(rate).toBeGreaterThan(0.002)
+      expect(rate).toBeLessThan(0.03)
+    })
+  })
+
+  describe('saveBuddy / getBuddy', () => {
+    it('round-trips a buddy correctly', () => {
+      const buddy = generateBuddy('roundtrip-user')
+      saveBuddy(buddy)
+
+      const loaded = getBuddy('roundtrip-user')
+      expect(loaded).not.toBeNull()
+      expect(loaded!.userId).toBe(buddy.userId)
+      expect(loaded!.species).toBe(buddy.species)
+      expect(loaded!.rarity).toBe(buddy.rarity)
+      expect(loaded!.shiny).toBe(buddy.shiny)
+      expect(loaded!.eyes).toBe(buddy.eyes)
+      expect(loaded!.hat).toBe(buddy.hat)
+      expect(loaded!.name).toBe(buddy.name)
+      expect(loaded!.personality).toBe(buddy.personality)
+      expect(loaded!.stats).toEqual(buddy.stats)
+      expect(loaded!.hatchedAt).toBe(buddy.hatchedAt)
+    })
+
+    it('returns null for non-existent user', () => {
+      const loaded = getBuddy('nonexistent')
+      expect(loaded).toBeNull()
+    })
+
+    it('overwrites on re-save', () => {
+      const buddy = generateBuddy('overwrite-user')
+      saveBuddy(buddy)
+
+      const modified = { ...buddy, name: 'NewName' }
+      saveBuddy(modified)
+
+      const loaded = getBuddy('overwrite-user')
+      expect(loaded!.name).toBe('NewName')
+    })
+  })
+
+  describe('getTopBuddies', () => {
+    it('returns empty array when no buddies exist', () => {
+      const top = getTopBuddies(10)
+      expect(top).toEqual([])
+    })
+
+    it('returns buddies sorted by total stats descending', () => {
+      // Create buddies with known stats
+      const buddy1 = generateBuddy('leader-1')
+      buddy1.stats = { charm: 10, wit: 10, dere: 10, drama: 10, luck: 10 }
+      saveBuddy(buddy1)
+
+      const buddy2 = generateBuddy('leader-2')
+      buddy2.stats = { charm: 1, wit: 1, dere: 1, drama: 1, luck: 1 }
+      saveBuddy(buddy2)
+
+      const top = getTopBuddies(10)
+      expect(top).toHaveLength(2)
+      expect(top[0].userId).toBe('leader-1')
+      expect(top[1].userId).toBe('leader-2')
+    })
+
+    it('respects the limit parameter', () => {
+      for (let i = 0; i < 5; i++) {
+        const buddy = generateBuddy(`limit-test-${i}`)
+        saveBuddy(buddy)
+      }
+      const top = getTopBuddies(3)
+      expect(top).toHaveLength(3)
+    })
+  })
+
+  describe('species catalog', () => {
+    it('has exactly 18 species', () => {
+      expect(SPECIES).toHaveLength(18)
+    })
+
+    it('all species have unique ids', () => {
+      const ids = SPECIES.map((s) => s.id)
+      expect(new Set(ids).size).toBe(ids.length)
     })
 
     it('has the expected distribution across rarity tiers', () => {
-      expect(getItemsByRarity('common').length).toBeGreaterThanOrEqual(20)
-      expect(getItemsByRarity('uncommon').length).toBeGreaterThanOrEqual(10)
-      expect(getItemsByRarity('rare').length).toBeGreaterThanOrEqual(5)
-      expect(getItemsByRarity('legendary').length).toBeGreaterThanOrEqual(3)
+      const counts: Record<BuddyRarity, number> = { common: 0, uncommon: 0, rare: 0, epic: 0, legendary: 0 }
+      for (const s of SPECIES) counts[s.rarity]++
+
+      expect(counts.common).toBe(7)
+      expect(counts.uncommon).toBe(4)
+      expect(counts.rare).toBe(3)
+      expect(counts.epic).toBe(2)
+      expect(counts.legendary).toBe(2)
     })
 
-    it('getTotalItemCount returns the correct count', () => {
-      expect(getTotalItemCount()).toBe(GACHA_ITEMS.length)
-    })
-  })
-
-  describe('rollRarity', () => {
-    it('returns a valid rarity', () => {
-      for (let i = 0; i < 100; i++) {
-        const rarity = rollRarity()
-        expect(['common', 'uncommon', 'rare', 'legendary']).toContain(rarity)
+    it('all species have required fields', () => {
+      for (const s of SPECIES) {
+        expect(s.id).toBeTruthy()
+        expect(s.name).toBeTruthy()
+        expect(s.emoji).toBeTruthy()
+        expect(['common', 'uncommon', 'rare', 'epic', 'legendary']).toContain(s.rarity)
+        expect(s.description).toBeTruthy()
       }
-    })
-
-    it('returns common when Math.random returns 0', () => {
-      vi.spyOn(Math, 'random').mockReturnValue(0)
-      expect(rollRarity()).toBe('common')
-      vi.restoreAllMocks()
-    })
-
-    it('returns common for low random values', () => {
-      // common weight is 60 out of 100 total, so 0.3 * 100 = 30 < 60
-      vi.spyOn(Math, 'random').mockReturnValue(0.3)
-      expect(rollRarity()).toBe('common')
-      vi.restoreAllMocks()
-    })
-
-    it('returns uncommon for mid-range random values', () => {
-      // common=60, uncommon=25, so 0.65 * 100 = 65 which is >= 60 and < 85
-      vi.spyOn(Math, 'random').mockReturnValue(0.65)
-      expect(rollRarity()).toBe('uncommon')
-      vi.restoreAllMocks()
-    })
-
-    it('returns rare for higher random values', () => {
-      // common=60, uncommon=25, rare=12, so 0.88 * 100 = 88 which is >= 85 and < 97
-      vi.spyOn(Math, 'random').mockReturnValue(0.88)
-      expect(rollRarity()).toBe('rare')
-      vi.restoreAllMocks()
-    })
-
-    it('returns legendary for the highest random values', () => {
-      // common=60, uncommon=25, rare=12, legendary=3, so 0.99 * 100 = 99 which is >= 97
-      vi.spyOn(Math, 'random').mockReturnValue(0.99)
-      expect(rollRarity()).toBe('legendary')
-      vi.restoreAllMocks()
-    })
-  })
-
-  describe('drawItem', () => {
-    it('returns a valid draw result', () => {
-      const result = drawItem('user-1')
-      expect(result.item).toBeDefined()
-      expect(result.item.id).toBeTruthy()
-      expect(result.item.name).toBeTruthy()
-      expect(typeof result.isNew).toBe('boolean')
-      expect(result.alreadyDrawnToday).toBe(false)
-    })
-
-    it('marks first draw as new', () => {
-      const result = drawItem('user-1')
-      expect(result.isNew).toBe(true)
-      expect(result.alreadyDrawnToday).toBe(false)
-    })
-
-    it('saves new item to collection', () => {
-      const result = drawItem('user-1')
-      const rows = testDb.prepare('SELECT * FROM gacha_collection WHERE user_id = ?').all('user-1')
-      expect(rows).toHaveLength(1)
-      expect((rows[0] as { item_id: string }).item_id).toBe(result.item.id)
-    })
-
-    it('enforces daily draw limit', () => {
-      drawItem('user-1')
-      const second = drawItem('user-1')
-      expect(second.alreadyDrawnToday).toBe(true)
-    })
-
-    it('does not save item to collection on duplicate draw day', () => {
-      drawItem('user-1')
-      const firstCollectionSize = testDb
-        .prepare('SELECT COUNT(*) as count FROM gacha_collection WHERE user_id = ?')
-        .get('user-1') as { count: number }
-
-      // Second draw same day — should not add to collection
-      drawItem('user-1')
-      const secondCollectionSize = testDb
-        .prepare('SELECT COUNT(*) as count FROM gacha_collection WHERE user_id = ?')
-        .get('user-1') as { count: number }
-
-      expect(secondCollectionSize.count).toBe(firstCollectionSize.count)
-    })
-
-    it('tracks daily draw per user independently', () => {
-      drawItem('user-1')
-      const result = drawItem('user-2')
-      expect(result.alreadyDrawnToday).toBe(false)
-    })
-
-    it('returns isNew=false for duplicate item', () => {
-      // Force the same item by mocking Math.random
-      vi.spyOn(Math, 'random').mockReturnValue(0)
-      drawItem('user-1')
-      vi.restoreAllMocks()
-
-      // Reset daily draw so we can draw again
-      resetDailyDraw('user-1')
-
-      // Force same item again
-      vi.spyOn(Math, 'random').mockReturnValue(0)
-      const result = drawItem('user-1')
-      vi.restoreAllMocks()
-
-      expect(result.isNew).toBe(false)
-      expect(result.alreadyDrawnToday).toBe(false)
-    })
-  })
-
-  describe('getCollection', () => {
-    it('returns empty array for user with no collection', () => {
-      const collection = getCollection('nonexistent')
-      expect(collection).toEqual([])
-    })
-
-    it('returns collected items', () => {
-      drawItem('user-1')
-      const collection = getCollection('user-1')
-      expect(collection.length).toBeGreaterThan(0)
-    })
-
-    it('sorts items by rarity (legendary first)', () => {
-      // Manually insert items of different rarities
-      const now = Date.now()
-      testDb
-        .prepare('INSERT INTO gacha_collection (user_id, item_id, obtained_at) VALUES (?, ?, ?)')
-        .run('user-1', 'fortune_lucky', now)
-      testDb
-        .prepare('INSERT INTO gacha_collection (user_id, item_id, obtained_at) VALUES (?, ?, ?)')
-        .run('user-1', 'legend_first_meeting', now + 1)
-      testDb
-        .prepare('INSERT INTO gacha_collection (user_id, item_id, obtained_at) VALUES (?, ?, ?)')
-        .run('user-1', 'recipe_secret_dango', now + 2)
-
-      const collection = getCollection('user-1')
-      expect(collection[0].rarity).toBe('legendary')
-      expect(collection[1].rarity).toBe('rare')
-      expect(collection[2].rarity).toBe('common')
-    })
-
-    it('only returns items for the requested user', () => {
-      testDb
-        .prepare('INSERT INTO gacha_collection (user_id, item_id, obtained_at) VALUES (?, ?, ?)')
-        .run('user-1', 'fortune_lucky', Date.now())
-      testDb
-        .prepare('INSERT INTO gacha_collection (user_id, item_id, obtained_at) VALUES (?, ?, ?)')
-        .run('user-2', 'legend_first_meeting', Date.now())
-
-      const collection = getCollection('user-1')
-      expect(collection).toHaveLength(1)
-      expect(collection[0].id).toBe('fortune_lucky')
-    })
-  })
-
-  describe('getCollectionStats', () => {
-    it('returns zero stats for empty collection', () => {
-      const stats = getCollectionStats('nonexistent')
-      expect(stats.total).toBe(0)
-      expect(stats.common).toBe(0)
-      expect(stats.uncommon).toBe(0)
-      expect(stats.rare).toBe(0)
-      expect(stats.legendary).toBe(0)
-      expect(stats.completion).toContain('0/')
-    })
-
-    it('counts items by rarity', () => {
-      const now = Date.now()
-      testDb
-        .prepare('INSERT INTO gacha_collection (user_id, item_id, obtained_at) VALUES (?, ?, ?)')
-        .run('user-1', 'fortune_lucky', now)
-      testDb
-        .prepare('INSERT INTO gacha_collection (user_id, item_id, obtained_at) VALUES (?, ?, ?)')
-        .run('user-1', 'fortune_cloudy', now + 1)
-      testDb
-        .prepare('INSERT INTO gacha_collection (user_id, item_id, obtained_at) VALUES (?, ?, ?)')
-        .run('user-1', 'trivia_hoori', now + 2)
-      testDb
-        .prepare('INSERT INTO gacha_collection (user_id, item_id, obtained_at) VALUES (?, ?, ?)')
-        .run('user-1', 'legend_first_meeting', now + 3)
-
-      const stats = getCollectionStats('user-1')
-      expect(stats.total).toBe(4)
-      expect(stats.common).toBe(2)
-      expect(stats.uncommon).toBe(1)
-      expect(stats.legendary).toBe(1)
-    })
-
-    it('calculates completion percentage', () => {
-      const totalItems = getTotalItemCount()
-      testDb
-        .prepare('INSERT INTO gacha_collection (user_id, item_id, obtained_at) VALUES (?, ?, ?)')
-        .run('user-1', 'fortune_lucky', Date.now())
-
-      const stats = getCollectionStats('user-1')
-      const expectedPct = ((1 / totalItems) * 100).toFixed(1)
-      expect(stats.completion).toBe(`1/${totalItems} (${expectedPct}%)`)
-    })
-  })
-
-  describe('resetDailyDraw', () => {
-    it('allows user to draw again after reset', () => {
-      drawItem('user-1')
-      const blocked = drawItem('user-1')
-      expect(blocked.alreadyDrawnToday).toBe(true)
-
-      resetDailyDraw('user-1')
-      const afterReset = drawItem('user-1')
-      expect(afterReset.alreadyDrawnToday).toBe(false)
-    })
-
-    it('does not affect other users', () => {
-      drawItem('user-1')
-      drawItem('user-2')
-
-      resetDailyDraw('user-1')
-
-      const user2 = drawItem('user-2')
-      expect(user2.alreadyDrawnToday).toBe(true)
     })
   })
 })

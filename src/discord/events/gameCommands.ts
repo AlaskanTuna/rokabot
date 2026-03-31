@@ -4,11 +4,25 @@
  */
 
 import type { ChatInputCommandInteraction, Client, TextBasedChannel } from 'discord.js'
-import { EmbedBuilder, MessageFlags } from 'discord.js'
-import { ContainerBuilder, SeparatorBuilder, TextDisplayBuilder } from '@discordjs/builders'
+import { MessageFlags } from 'discord.js'
+import {
+  ContainerBuilder,
+  SectionBuilder,
+  SeparatorBuilder,
+  TextDisplayBuilder,
+  ThumbnailBuilder
+} from '@discordjs/builders'
 import { logger } from '../../utils/logger.js'
-import { drawItem, getCollection, getCollectionStats } from '../../games/gacha.js'
-import { RARITY_COLORS, RARITY_EMOJI, getTotalItemCount, type GachaRarity } from '../../games/data/gachaItems.js'
+import { generateBuddy, saveBuddy, getBuddy, getTopBuddies, getSpeciesInfo, type BuddyData } from '../../games/buddy.js'
+import {
+  SPECIES,
+  RARITY_COLORS,
+  RARITY_EMOJI,
+  RARITY_PLACEHOLDER_COLORS,
+  STAT_NAMES,
+  RARITY_STAT_RANGE,
+  type BuddyRarity
+} from '../../games/data/buddySpecies.js'
 import {
   startGame as startHangman,
   guessLetter,
@@ -81,124 +95,354 @@ const SHIRITORI_COLORS = {
   info: 0xff9f0a
 }
 
-// ── Gacha handlers (unchanged — keep embeds) ──
-
-const ALREADY_DRAWN_MESSAGES = [
-  'Mou~ you already drew today! Come back tomorrow for another try~ \u266A',
-  'You already used your draw for today~ Be patient! Good things come to those who wait~ \u266A',
-  "Fufu~ one per day is the rule! I'll have something nice waiting for you tomorrow~"
-]
+// ── Buddy pet helpers ──
 
 function randomFrom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]
 }
 
-function handleDraw(interaction: ChatInputCommandInteraction) {
-  const userId = interaction.user.id
-  const result = drawItem(userId)
-
-  if (result.alreadyDrawnToday) {
-    return { content: randomFrom(ALREADY_DRAWN_MESSAGES) }
-  }
-
-  const emoji = RARITY_EMOJI[result.item.rarity]
-  const color = RARITY_COLORS[result.item.rarity]
-  const stats = getCollectionStats(userId)
-  const totalItems = getTotalItemCount()
-
-  const description = result.isNew
-    ? result.item.description
-    : `${result.item.description}\n\n*You already have this one~ Better luck tomorrow!*`
-
-  const footerLabel = result.isNew ? 'New! \u2728' : 'Duplicate'
-
-  const embed = new EmbedBuilder()
-    .setTitle(`${emoji} ${result.item.name}`)
-    .setDescription(description)
-    .setColor(color)
-    .setFooter({
-      text: `${result.item.rarity.toUpperCase()} \u2022 ${footerLabel} \u2022 ${stats.total}/${totalItems} collected`
-    })
-
-  return { embeds: [embed] }
+/** Build a stat bar: e.g. "CHARM/魅力  ████░░░░░░  4/10" */
+function statBar(value: number, max: number = 10): string {
+  const filled = '\u2588'.repeat(value)
+  const empty = '\u2591'.repeat(max - value)
+  return `${filled}${empty}`
 }
 
-function handleCollection(interaction: ChatInputCommandInteraction) {
-  const userId = interaction.user.id
-  const collection = getCollection(userId)
-
-  if (collection.length === 0) {
-    return { content: "You haven't collected anything yet~ Try `/gacha draw` for your first fortune! \u266A" }
-  }
-
-  const rarityOrder: GachaRarity[] = ['legendary', 'rare', 'uncommon', 'common']
-  const sections: string[] = []
-
-  for (const rarity of rarityOrder) {
-    const items = collection.filter((item) => item.rarity === rarity)
-    if (items.length === 0) continue
-
-    const emoji = RARITY_EMOJI[rarity]
-    const header = `**${rarity.charAt(0).toUpperCase() + rarity.slice(1)}**`
-    const itemList = items.map((item) => `${emoji} ${item.name}`).join('\n')
-    sections.push(`${header}\n${itemList}`)
-  }
-
-  const stats = getCollectionStats(userId)
-  const totalItems = getTotalItemCount()
-
-  const embed = new EmbedBuilder()
-    .setTitle("\uD83C\uDF81 Roka's Fortune Collection")
-    .setDescription(sections.join('\n\n'))
-    .setColor(0xffb3d9)
-    .setFooter({ text: `${stats.total}/${totalItems} collected (${((stats.total / totalItems) * 100).toFixed(1)}%)` })
-
-  return { embeds: [embed] }
+/** Build a placehold.co thumbnail URL for a species + rarity. */
+function buddyThumbnailUrl(species: string, rarity: BuddyRarity): string {
+  const info = getSpeciesInfo(species)
+  const color = RARITY_PLACEHOLDER_COLORS[rarity]
+  const emoji = info?.emoji ?? '\u2753'
+  return `https://placehold.co/80x80/${color}/white?text=${encodeURIComponent(emoji)}`
 }
 
-function handleStats(interaction: ChatInputCommandInteraction) {
-  const userId = interaction.user.id
-  const stats = getCollectionStats(userId)
-  const totalItems = getTotalItemCount()
+/** Build a Components V2 container with a buddy thumbnail in the top-right section. */
+function buildBuddyContainer(options: {
+  accentColor: number
+  title: string
+  body: string
+  thumbnailUrl?: string
+  footer?: string
+}) {
+  const container = new ContainerBuilder().setAccentColor(options.accentColor)
 
-  const legendaryTotal = 4
-  const rareTotal = 6
-  const uncommonTotal = 11
-  const commonTotal = 22
+  if (options.thumbnailUrl) {
+    const section = new SectionBuilder()
+      .addTextDisplayComponents(new TextDisplayBuilder().setContent(`### ${options.title}\n\n${options.body}`))
+      .setThumbnailAccessory(new ThumbnailBuilder({ media: { url: options.thumbnailUrl } }))
+    container.addSectionComponents(section)
+  } else {
+    container
+      .addTextDisplayComponents(new TextDisplayBuilder().setContent(`### ${options.title}`))
+      .addSeparatorComponents(new SeparatorBuilder())
+      .addTextDisplayComponents(new TextDisplayBuilder().setContent(options.body))
+  }
+
+  if (options.footer) {
+    container
+      .addSeparatorComponents(new SeparatorBuilder())
+      .addTextDisplayComponents(new TextDisplayBuilder().setContent(`-# ${options.footer}`))
+  }
+
+  return {
+    components: [container],
+    flags: MessageFlags.IsComponentsV2 as typeof MessageFlags.IsComponentsV2
+  }
+}
+
+/** Format a buddy summary for display. */
+function formatBuddySummary(buddy: BuddyData): string {
+  const info = getSpeciesInfo(buddy.species)
+  const rarityEmoji = RARITY_EMOJI[buddy.rarity]
+  const shinyTag = buddy.shiny ? ' \u2728 **SHINY**' : ''
+  const hatDisplay = buddy.hat !== 'none' ? ` | Hat: ${buddy.hat}` : ''
 
   const lines = [
-    `**Total:** ${stats.completion}`,
-    '',
-    `${RARITY_EMOJI.legendary} **Legendary:** ${stats.legendary}/${legendaryTotal}`,
-    `${RARITY_EMOJI.rare} **Rare:** ${stats.rare}/${rareTotal}`,
-    `${RARITY_EMOJI.uncommon} **Uncommon:** ${stats.uncommon}/${uncommonTotal}`,
-    `${RARITY_EMOJI.common} **Common:** ${stats.common}/${commonTotal}`
+    `${info?.emoji ?? ''} **${buddy.name ?? 'Unknown'}** ${rarityEmoji} ${buddy.rarity.toUpperCase()}${shinyTag}`,
+    `*${info?.name ?? buddy.species}*${hatDisplay} | Eyes: ${buddy.eyes}`,
+    ''
   ]
 
-  const pct = totalItems > 0 ? (stats.total / totalItems) * 100 : 0
-  let commentary: string
-  if (pct === 100) {
-    commentary = "You've collected everything?! Sugoi~! You're a true completionist! \u2661"
-  } else if (pct >= 75) {
-    commentary = "Wow, you're so close to completing the collection~! Keep going! \u266A"
-  } else if (pct >= 50) {
-    commentary = 'More than halfway there~ You have great luck! \u2606'
-  } else if (pct >= 25) {
-    commentary = "A nice collection so far~ There's still plenty to discover!"
-  } else if (stats.total > 0) {
-    commentary = 'Just getting started~ Come back every day for a new draw! \u266A'
-  } else {
-    commentary = "You haven't drawn anything yet~ Try `/gacha draw` to start your collection!"
+  if (buddy.personality) {
+    lines.push(`> ${buddy.personality}`, '')
   }
 
-  lines.push('', `*${commentary}*`)
+  for (const { key, display } of STAT_NAMES) {
+    const val = buddy.stats[key] ?? 0
+    lines.push(`${display}  ${statBar(val)}  **${val}**/10`)
+  }
 
-  const embed = new EmbedBuilder()
-    .setTitle('\uD83D\uDCCA Collection Progress')
-    .setDescription(lines.join('\n'))
-    .setColor(0xffb3d9)
+  return lines.join('\n')
+}
 
-  return { embeds: [embed] }
+// ── Buddy command handlers ──
+
+function handleHatch(interaction: ChatInputCommandInteraction) {
+  const userId = interaction.user.id
+  const existing = getBuddy(userId)
+
+  if (existing) {
+    const info = getSpeciesInfo(existing.species)
+    return buildBuddyContainer({
+      accentColor: RARITY_COLORS[existing.rarity],
+      title: 'Already Hatched!',
+      body: `You already have **${existing.name}** the ${info?.name ?? existing.species}~ Use \`/gacha view\` to see them!`,
+      thumbnailUrl: buddyThumbnailUrl(existing.species, existing.rarity)
+    })
+  }
+
+  const buddy = generateBuddy(userId)
+  saveBuddy(buddy)
+
+  const info = getSpeciesInfo(buddy.species)
+  const rarityEmoji = RARITY_EMOJI[buddy.rarity]
+  const shinyTag = buddy.shiny ? '\n\u2728 **SHINY VARIANT!** \u2728' : ''
+
+  const body = [
+    `A companion spirit has chosen you~!${shinyTag}`,
+    '',
+    `${info?.emoji ?? ''} **${buddy.name}** ${rarityEmoji} ${buddy.rarity.toUpperCase()}`,
+    `*${info?.description ?? ''}*`,
+    ''
+  ]
+
+  for (const { key, display } of STAT_NAMES) {
+    const val = buddy.stats[key] ?? 0
+    body.push(`${display}  ${statBar(val)}  **${val}**/10`)
+  }
+
+  body.push('', `Use \`/gacha view\` to see your companion anytime~`)
+
+  return buildBuddyContainer({
+    accentColor: RARITY_COLORS[buddy.rarity],
+    title: 'Companion Hatched!',
+    body: body.join('\n'),
+    thumbnailUrl: buddyThumbnailUrl(buddy.species, buddy.rarity)
+  })
+}
+
+function handleBuddyView(interaction: ChatInputCommandInteraction) {
+  const userId = interaction.user.id
+  const buddy = getBuddy(userId)
+
+  if (!buddy) {
+    return buildGameContainer({
+      accentColor: 0xb0c4de,
+      title: 'No Companion',
+      body: "You don't have a companion spirit yet~ Use `/gacha hatch` to get one!"
+    })
+  }
+
+  return buildBuddyContainer({
+    accentColor: RARITY_COLORS[buddy.rarity],
+    title: `${buddy.name ?? 'Your Companion'}`,
+    body: formatBuddySummary(buddy),
+    thumbnailUrl: buddyThumbnailUrl(buddy.species, buddy.rarity),
+    footer: `Hatched on ${new Date(buddy.hatchedAt).toLocaleDateString('en-GB')}`
+  })
+}
+
+/** Pet interaction responses grouped by species personality archetypes. */
+const PET_RESPONSES: Record<string, string[]> = {
+  cute: [
+    '*nuzzles against your hand happily~* Ehehe, that tickles!',
+    '*purrs softly* ...More pats please~',
+    '*wiggles excitedly* You always know just where to scratch!',
+    "*rolls over and shows their belly* ...D-Don't get the wrong idea!"
+  ],
+  cool: [
+    "*glances at you* ...Fine, I suppose I'll allow this.",
+    "*sits perfectly still* ...I'm not enjoying this. (tail wagging)",
+    '*yawns dramatically* How boring... (leans into your hand)',
+    '*looks away* ...You may continue.'
+  ],
+  chaotic: [
+    '*bounces off the walls* YAAAA! Again again again!',
+    "*shapeshifts into a teacup* ...Ha! Didn't expect that, did you?",
+    '*sets something on fire* Oops! ...Worth it though!',
+    '*cackles wildly* That was FUN! Do it again!'
+  ],
+  gentle: [
+    '*sways peacefully* Thank you... that feels nice~',
+    '*glows softly* Your warmth is really comforting...',
+    '*hums a quiet melody* Mmm~ this is nice...',
+    '*rustles their leaves/petals contentedly* So peaceful~'
+  ]
+}
+
+/** Map species to personality archetype for pet responses. */
+const SPECIES_ARCHETYPE: Record<string, string> = {
+  mochi: 'cute',
+  chibi: 'cute',
+  usagi: 'cute',
+  sakura: 'gentle',
+  tsukimi: 'gentle',
+  kodama: 'gentle',
+  yuki: 'gentle',
+  tanuki: 'chaotic',
+  bakeneko: 'cool',
+  inugami: 'cute',
+  kitsune: 'cool',
+  kappa: 'chaotic',
+  tengu: 'cool',
+  nekomata: 'cool',
+  tatsu: 'chaotic',
+  oni: 'chaotic',
+  kaiju: 'chaotic',
+  obake: 'chaotic'
+}
+
+function handlePet(interaction: ChatInputCommandInteraction) {
+  const userId = interaction.user.id
+  const buddy = getBuddy(userId)
+
+  if (!buddy) {
+    return buildGameContainer({
+      accentColor: 0xb0c4de,
+      title: 'No Companion',
+      body: "You don't have a companion spirit yet~ Use `/gacha hatch` to get one!"
+    })
+  }
+
+  const archetype = SPECIES_ARCHETYPE[buddy.species] ?? 'cute'
+  const responses = PET_RESPONSES[archetype] ?? PET_RESPONSES.cute
+  const response = randomFrom(responses)
+  const info = getSpeciesInfo(buddy.species)
+
+  return buildBuddyContainer({
+    accentColor: RARITY_COLORS[buddy.rarity],
+    title: `${info?.emoji ?? ''} ${buddy.name}`,
+    body: response,
+    thumbnailUrl: buddyThumbnailUrl(buddy.species, buddy.rarity)
+  })
+}
+
+function handleBuddyStats(interaction: ChatInputCommandInteraction) {
+  const userId = interaction.user.id
+  const buddy = getBuddy(userId)
+
+  if (!buddy) {
+    return buildGameContainer({
+      accentColor: 0xb0c4de,
+      title: 'No Companion',
+      body: "You don't have a companion spirit yet~ Use `/gacha hatch` to get one!"
+    })
+  }
+
+  const info = getSpeciesInfo(buddy.species)
+  const rarityEmoji = RARITY_EMOJI[buddy.rarity]
+  const range = RARITY_STAT_RANGE[buddy.rarity]
+  const totalStats = Object.values(buddy.stats).reduce((s, v) => s + v, 0)
+
+  const lines = [
+    `${info?.emoji ?? ''} **${buddy.name}** ${rarityEmoji} ${buddy.rarity.toUpperCase()}`,
+    '',
+    '**Detailed Stats:**',
+    ''
+  ]
+
+  const statDescriptions: Record<string, string> = {
+    charm: 'Social charisma, flirt power',
+    wit: 'Cleverness, comedic timing',
+    dere: 'Affection level, warmth',
+    drama: 'Tendency for dramatic moments',
+    luck: 'Plot armor, gacha fortune'
+  }
+
+  for (const { key, display } of STAT_NAMES) {
+    const val = buddy.stats[key] ?? 0
+    lines.push(`**${display}**  ${statBar(val)}  **${val}**/10`)
+    lines.push(`-# ${statDescriptions[key] ?? ''}`)
+  }
+
+  lines.push('', `**Total:** ${totalStats}/50`)
+  lines.push(`**Stat range:** ${range.floor}\u2013${range.max} (${buddy.rarity})`)
+
+  return buildBuddyContainer({
+    accentColor: RARITY_COLORS[buddy.rarity],
+    title: 'Companion Stats',
+    body: lines.join('\n'),
+    thumbnailUrl: buddyThumbnailUrl(buddy.species, buddy.rarity)
+  })
+}
+
+function handleBuddyGuide() {
+  const speciesByRarity: Record<BuddyRarity, string[]> = {
+    common: [],
+    uncommon: [],
+    rare: [],
+    epic: [],
+    legendary: []
+  }
+  for (const s of SPECIES) {
+    speciesByRarity[s.rarity].push(`${s.emoji} ${s.name}`)
+  }
+
+  return buildGameContainer({
+    accentColor: 0xb0c4de,
+    title: 'Companion Spirit Guide',
+    body: [
+      'Every user gets a unique companion spirit, determined by your soul (user ID). Your companion is yours forever~',
+      '',
+      '**Commands:**',
+      '\u2022 `/gacha hatch` \u2014 Hatch your companion for the first time',
+      '\u2022 `/gacha view` \u2014 View your companion',
+      '\u2022 `/gacha pet` \u2014 Interact with your companion',
+      '\u2022 `/gacha stats` \u2014 Detailed stat breakdown',
+      '\u2022 `/gacha leaderboard` \u2014 Top companions by total stats',
+      '',
+      '**Rarity Tiers:**',
+      `\u2022 ${RARITY_EMOJI.common} **Common** (60%) \u2014 ${speciesByRarity.common.join(', ')}`,
+      `\u2022 ${RARITY_EMOJI.uncommon} **Uncommon** (25%) \u2014 ${speciesByRarity.uncommon.join(', ')}`,
+      `\u2022 ${RARITY_EMOJI.rare} **Rare** (10%) \u2014 ${speciesByRarity.rare.join(', ')}`,
+      `\u2022 ${RARITY_EMOJI.epic} **Epic** (4%) \u2014 ${speciesByRarity.epic.join(', ')}`,
+      `\u2022 ${RARITY_EMOJI.legendary} **Legendary** (1%) \u2014 ${speciesByRarity.legendary.join(', ')}`,
+      '',
+      '**Stats (5):** CHARM/\u9B45\u529B, WIT/\u6A5F\u77E5, DERE/\u30C7\u30EC, DRAMA/\u4FEE\u7F85\u5834, LUCK/\u904B\u547D',
+      '',
+      'There is also a **1% chance** of a shiny variant~ Good luck!'
+    ].join('\n')
+  })
+}
+
+function handleBuddyLeaderboard(interaction: ChatInputCommandInteraction) {
+  const topBuddies = getTopBuddies(10)
+
+  if (topBuddies.length === 0) {
+    return buildGameContainer({
+      accentColor: 0xb0c4de,
+      title: 'Companion Leaderboard',
+      body: 'No companions hatched yet~ Be the first to use `/gacha hatch`!'
+    })
+  }
+
+  const medals = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49']
+  const lines = topBuddies.map((buddy, i) => {
+    const prefix = i < 3 ? medals[i] : `**${i + 1}.**`
+    const info = getSpeciesInfo(buddy.species)
+    const totalStats = Object.values(buddy.stats).reduce((s, v) => s + v, 0)
+    const rarityEmoji = RARITY_EMOJI[buddy.rarity]
+    const shiny = buddy.shiny ? ' \u2728' : ''
+    return `${prefix} <@${buddy.userId}> \u2014 **${buddy.name}** ${info?.emoji ?? ''} ${rarityEmoji}${shiny} (${totalStats} pts)`
+  })
+
+  const userId = interaction.user.id
+  const userInTop = topBuddies.some((b) => b.userId === userId)
+  let footer: string | undefined
+  if (!userInTop) {
+    const userBuddy = getBuddy(userId)
+    if (userBuddy) {
+      const userTotal = Object.values(userBuddy.stats).reduce((s, v) => s + v, 0)
+      footer = `Your companion: ${userBuddy.name} (${userTotal} pts)`
+    }
+  }
+
+  return buildGameContainer({
+    accentColor: 0xffd700,
+    title: 'Companion Leaderboard',
+    body: lines.join('\n'),
+    footer
+  })
 }
 
 // ── Guide handlers ──
@@ -256,28 +500,7 @@ function handleShiritoriGuide() {
   })
 }
 
-function handleGachaGuide() {
-  return buildGameContainer({
-    accentColor: 0xb0c4de,
-    title: '\uD83C\uDFB0 How Gacha Works',
-    body: [
-      "Draw a daily fortune from Roka's collection! Each draw gives you a random item with in-character commentary.",
-      '',
-      '**Commands:**',
-      "\u2022 `/gacha draw` \u2014 Draw today's fortune (1 per day)",
-      '\u2022 `/gacha collection` \u2014 View your collected items',
-      '\u2022 `/gacha stats` \u2014 See completion progress',
-      '',
-      '**Rarity Tiers:**',
-      '\u2022 \u26AA **Common** (60%) \u2014 Daily fortunes, cooking tips',
-      '\u2022 \uD83D\uDFE2 **Uncommon** (25%) \u2014 Seasonal messages, trivia',
-      '\u2022 \uD83D\uDD35 **Rare** (12%) \u2014 Secret recipes, personal stories',
-      '\u2022 \uD83C\uDF1F **Legendary** (3%) \u2014 Unique collectible moments',
-      '',
-      'You can also trigger a draw by mentioning Roka with "gacha", "draw", "fortune", or "omikuji"~'
-    ].join('\n')
-  })
-}
+// handleGachaGuide removed — replaced by handleBuddyGuide above
 
 // ── Leaderboard handler ──
 
@@ -732,23 +955,33 @@ export function createGameCommandHandler(client?: Client) {
         const subcommand = interaction.options.getSubcommand()
 
         switch (subcommand) {
-          case 'draw': {
-            const payload = handleDraw(interaction)
+          case 'hatch': {
+            const payload = handleHatch(interaction)
             await interaction.reply(payload)
             break
           }
-          case 'collection': {
-            const payload = handleCollection(interaction)
+          case 'view': {
+            const payload = handleBuddyView(interaction)
+            await interaction.reply(payload)
+            break
+          }
+          case 'pet': {
+            const payload = handlePet(interaction)
             await interaction.reply(payload)
             break
           }
           case 'stats': {
-            const payload = handleStats(interaction)
+            const payload = handleBuddyStats(interaction)
             await interaction.reply(payload)
             break
           }
           case 'guide': {
-            const payload = handleGachaGuide()
+            const payload = handleBuddyGuide()
+            await interaction.reply(payload)
+            break
+          }
+          case 'leaderboard': {
+            const payload = handleBuddyLeaderboard(interaction)
             await interaction.reply(payload)
             break
           }
