@@ -92,7 +92,7 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
       .slice(0, MAX_IMAGE_ATTACHMENTS)
 
     // Include referenced message content as context so Roka can see what the user is replying to
-    if (referencedMessage && !isReplyToBot) {
+    if (referencedMessage) {
       const refAuthor = referencedMessage.member?.displayName ?? referencedMessage.author.displayName
       const refContent = referencedMessage.content?.trim()
 
@@ -114,12 +114,43 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
         }
       }
 
+      // Extract poll question and options
+      if (referencedMessage.poll) {
+        const poll = referencedMessage.poll
+        const pollParts: string[] = []
+        if (poll.question.text) pollParts.push(`Poll: ${poll.question.text}`)
+        if (poll.answers.size > 0) {
+          for (const answer of poll.answers.values()) {
+            if (answer.text) pollParts.push(`- ${answer.text}`)
+          }
+        }
+        if (pollParts.length > 0) {
+          refParts.push(`[${pollParts.join(' | ')}]`)
+        }
+      }
+
+      // Extract forwarded message content
+      if (referencedMessage.messageSnapshots.size > 0) {
+        for (const snapshot of referencedMessage.messageSnapshots.values()) {
+          const fwdContent = snapshot.content?.trim()
+          if (fwdContent) {
+            refParts.push(`[Forwarded: ${fwdContent}]`)
+          }
+        }
+      }
+
       // Pull text from Components V2 containers (other bots using container messages)
       if (referencedMessage.components.length > 0) {
         const componentTexts = extractComponentTexts(referencedMessage.components)
         if (componentTexts.length > 0) {
           refParts.push(`[Container: ${componentTexts.join(' | ')}]`)
         }
+      }
+
+      // Extract sticker names
+      if (referencedMessage.stickers.size > 0) {
+        const stickerNames = referencedMessage.stickers.map((s) => s.name).join(', ')
+        refParts.push(`(sticker: ${stickerNames})`)
       }
 
       if (referencedMessage.attachments.size > 0) refParts.push('(attached image(s))')
