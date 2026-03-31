@@ -8,6 +8,7 @@ import type { LlmResponse, Event } from '@google/adk'
 import type { GetSessionRequest, Session } from '@google/adk'
 import type { Content, Part } from '@google/genai'
 import { logger } from '../utils/logger.js'
+import { processImageForGemini } from '../utils/imageProcessor.js'
 import { assembleSystemPrompt } from './promptAssembler.js'
 import { detectTone } from './toneDetector.js'
 import type { ToneKey } from './prompts/tones.js'
@@ -246,9 +247,10 @@ async function downloadImage(url: string): Promise<{ data: string; mimeType: str
       return null
     }
 
-    const base64 = Buffer.from(buffer).toString('base64')
-    const mimeType = response.headers.get('content-type') || 'image/png'
-    return { data: base64, mimeType }
+    const rawBuffer = Buffer.from(buffer)
+    const processed = await processImageForGemini(rawBuffer)
+    const base64 = processed.data.toString('base64')
+    return { data: base64, mimeType: processed.mimeType }
   } catch (error) {
     logger.warn({ url, error }, 'Error downloading image')
     return null
