@@ -1,6 +1,7 @@
 /**
  * Periodic scheduler that checks for due reminders and delivers them
  * as in-character Discord messages in the original channel.
+ * Falls back to DM if the channel is not accessible.
  */
 
 import type { Client } from 'discord.js'
@@ -22,9 +23,21 @@ export function startReminderScheduler(client: Client): void {
           markDelivered(reminder.id)
           logger.info({ reminderId: reminder.id, userId: reminder.userId }, 'Reminder delivered')
         } else {
-          // Channel not accessible, still mark as delivered to prevent infinite retries
-          markDelivered(reminder.id)
-          logger.warn({ reminderId: reminder.id, channelId: reminder.channelId }, 'Reminder channel not accessible')
+          // Channel not accessible — try DM fallback
+          try {
+            const user = await client.users.fetch(reminder.userId)
+            await user.send(
+              `Hey~ you asked me to remind you: "${reminder.reminder}" \u266a\n\n-# (Sent as DM because I couldn't reach the original channel)`
+            )
+            markDelivered(reminder.id)
+            logger.info(
+              { reminderId: reminder.id, userId: reminder.userId },
+              'Reminder delivered via DM (channel fallback)'
+            )
+          } catch (dmError) {
+            markDelivered(reminder.id)
+            logger.warn({ reminderId: reminder.id }, 'Reminder channel and DM both inaccessible, marking delivered')
+          }
         }
       } catch (error) {
         logger.error({ reminderId: reminder.id, error }, 'Failed to deliver reminder')

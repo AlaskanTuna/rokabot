@@ -131,6 +131,19 @@ export function getActiveReminders(userId: string): ActiveReminder[] {
 }
 
 /**
+ * Get a single reminder by ID (returns null if not found or already delivered).
+ */
+export function getReminderById(id: number): { id: number; userId: string; reminder: string; dueAt: number } | null {
+  const db = getDb()
+  const row = db
+    .prepare('SELECT id, user_id, reminder, due_at FROM reminders WHERE id = ? AND delivered = 0')
+    .get(id) as { id: number; user_id: string; reminder: string; due_at: number } | undefined
+
+  if (!row) return null
+  return { id: row.id, userId: row.user_id, reminder: row.reminder, dueAt: row.due_at }
+}
+
+/**
  * Delete a specific reminder by ID.
  */
 export function deleteReminder(id: number): void {

@@ -4,7 +4,7 @@ import { logger } from '../../utils/logger.js'
 import { jikanThrottle } from './jikanThrottle.js'
 
 export interface SearchAnimeParams {
-  query: string
+  query?: string
   limit?: number // 1-25, default 5
   sort_by?: 'score' | 'popularity' | 'members' | 'title' | 'start_date'
   type?: 'tv' | 'movie' | 'ova' | 'special' | 'ona' | 'music'
@@ -48,8 +48,10 @@ interface JikanResponse {
 
 /** Search for anime by title or keyword with optional type/status filters and sorting. */
 export async function searchAnime(params: SearchAnimeParams): Promise<SearchAnimeResult> {
-  const query = params.query.trim()
-  if (!query) {
+  const query = (params.query ?? '').trim()
+  const hasFilters = params.sort_by || params.type || params.status
+
+  if (!query && !hasFilters) {
     return { results: [], query, total: 0 }
   }
 
@@ -58,17 +60,19 @@ export async function searchAnime(params: SearchAnimeParams): Promise<SearchAnim
   try {
     await jikanThrottle()
 
-    const urlParts = [`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(query)}`, `limit=${limit}`, 'sfw=true']
+    const urlParams = [`limit=${limit}`, 'sfw=true']
+
+    if (query) urlParams.push(`q=${encodeURIComponent(query)}`)
 
     if (params.sort_by) {
       const orderBy = params.sort_by === 'start_date' ? 'start_date' : params.sort_by
-      urlParts.push(`order_by=${orderBy}`)
-      urlParts.push(`sort=${params.sort_by === 'title' || params.sort_by === 'start_date' ? 'asc' : 'desc'}`)
+      urlParams.push(`order_by=${orderBy}`)
+      urlParams.push(`sort=${params.sort_by === 'title' || params.sort_by === 'start_date' ? 'asc' : 'desc'}`)
     }
-    if (params.type) urlParts.push(`type=${params.type}`)
-    if (params.status) urlParts.push(`status=${params.status}`)
+    if (params.type) urlParams.push(`type=${params.type}`)
+    if (params.status) urlParams.push(`status=${params.status}`)
 
-    const url = urlParts.join('&')
+    const url = `https://api.jikan.moe/v4/anime?${urlParams.join('&')}`
     const response = await fetch(url)
 
     if (!response.ok) {

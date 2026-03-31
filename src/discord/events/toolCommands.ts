@@ -15,7 +15,7 @@ import { getWeather } from '../../agent/tools/getWeather.js'
 import { searchAnime, type SearchAnimeParams } from '../../agent/tools/searchAnime.js'
 import { getAnimeSchedule } from '../../agent/tools/getAnimeSchedule.js'
 import { searchWeb } from '../../agent/tools/searchWeb.js'
-import { createReminder } from '../../storage/reminderStore.js'
+import { createReminder, getActiveReminders, getReminderById, deleteReminder } from '../../storage/reminderStore.js'
 import { config } from '../../config.js'
 
 const PLAYFUL_COLOR = 0xffb3d9
@@ -105,18 +105,33 @@ function handleTime(interaction: ChatInputCommandInteraction) {
   return buildToolMessage(text, CURIOUS_COLOR)
 }
 
+// ──────────────────────────────────────────────
+// Anime handler (with subcommands + pagination)
+// ──────────────────────────────────────────────
+
 async function handleAnime(interaction: ChatInputCommandInteraction) {
-  const query = interaction.options.getString('query', true)
-  const sortBy = (interaction.options.getString('sort_by') ?? undefined) as SearchAnimeParams['sort_by']
-  const type = (interaction.options.getString('type') ?? undefined) as SearchAnimeParams['type']
-  const status = (interaction.options.getString('status') ?? undefined) as SearchAnimeParams['status']
-  const limit = interaction.options.getInteger('limit') ?? undefined
+  const subcommand = interaction.options.getSubcommand()
   const flavor = randomFrom(FLAVOR.anime)
 
-  const result = await searchAnime({ query, limit, sort_by: sortBy, type, status })
+  let query: string | undefined
+  let sortBy: SearchAnimeParams['sort_by']
+  let type: SearchAnimeParams['type']
+  let status: SearchAnimeParams['status']
+
+  if (subcommand === 'search') {
+    query = interaction.options.getString('query', true)
+  } else {
+    // browse
+    sortBy = (interaction.options.getString('sort_by') ?? undefined) as SearchAnimeParams['sort_by']
+    type = (interaction.options.getString('type') ?? undefined) as SearchAnimeParams['type']
+    status = (interaction.options.getString('status') ?? undefined) as SearchAnimeParams['status']
+  }
+
+  const result = await searchAnime({ query, limit: 25, sort_by: sortBy, type, status })
 
   if (result.results.length === 0) {
-    const text = `${flavor}\n\nHmm, I couldn't find anything for "${query}"... Maybe try a different title?`
+    const label = query ? `"${query}"` : 'those filters'
+    const text = `${flavor}\n\nHmm, I couldn't find anything for ${label}... Maybe try something different?`
     return buildToolMessage(text, CURIOUS_COLOR)
   }
 
@@ -147,6 +162,7 @@ async function handleAnime(interaction: ChatInputCommandInteraction) {
 
   // Multi-page — attach pagination buttons with a 60s collector
   let currentPage = 0
+  const interactionId = interaction.id
 
   const buildPageContainer = (page: number, buttonsEnabled: boolean) => {
     const container = new ContainerBuilder()
@@ -156,12 +172,12 @@ async function handleAnime(interaction: ChatInputCommandInteraction) {
       container.addActionRowComponents(
         new ActionRowBuilder<ButtonBuilder>().addComponents(
           new ButtonBuilder()
-            .setCustomId('anime_prev')
+            .setCustomId(`anime_prev_${interactionId}`)
             .setLabel('\u25C0 Prev')
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(page === 0),
           new ButtonBuilder()
-            .setCustomId('anime_next')
+            .setCustomId(`anime_next_${interactionId}`)
             .setLabel('Next \u25B6')
             .setStyle(ButtonStyle.Primary)
             .setDisabled(page >= totalPages - 1)
@@ -187,8 +203,8 @@ async function handleAnime(interaction: ChatInputCommandInteraction) {
       return
     }
 
-    if (btnInteraction.customId === 'anime_next' && currentPage < totalPages - 1) currentPage++
-    else if (btnInteraction.customId === 'anime_prev' && currentPage > 0) currentPage--
+    if (btnInteraction.customId.startsWith('anime_next') && currentPage < totalPages - 1) currentPage++
+    else if (btnInteraction.customId.startsWith('anime_prev') && currentPage > 0) currentPage--
 
     await btnInteraction.update({
       components: [buildPageContainer(currentPage, true)],
@@ -208,20 +224,27 @@ async function handleAnime(interaction: ChatInputCommandInteraction) {
   return undefined as unknown as ReturnType<typeof buildToolMessage>
 }
 
+// ──────────────────────────────────────────────
+// Schedule handler (with subcommands + pagination)
+// ──────────────────────────────────────────────
+
 async function handleSchedule(interaction: ChatInputCommandInteraction) {
-  const scope = (interaction.options.getString('scope') ?? 'day') as 'day' | 'week' | 'season'
-  const day = interaction.options.getString('day') ?? undefined
-  const sortBy = (interaction.options.getString('sort_by') ?? undefined) as
-    | 'score'
-    | 'popularity'
-    | 'members'
-    | 'title'
-    | undefined
-  const limit = interaction.options.getInteger('limit') ?? undefined
-  const anime = interaction.options.getString('anime') ?? undefined
+  const subcommand = interaction.options.getSubcommand()
   const flavor = randomFrom(FLAVOR.schedule)
 
-  const result = await getAnimeSchedule({ scope, day, sort_by: sortBy, limit, anime })
+  let anime: string | undefined
+  let scope: 'day' | 'week' | 'season' = 'day'
+  let sortBy: 'score' | 'popularity' | 'members' | 'title' | undefined
+
+  if (subcommand === 'search') {
+    anime = interaction.options.getString('anime', true)
+  } else {
+    // browse
+    scope = (interaction.options.getString('scope') ?? 'day') as 'day' | 'week' | 'season'
+    sortBy = (interaction.options.getString('sort_by') ?? undefined) as typeof sortBy
+  }
+
+  const result = await getAnimeSchedule({ scope, sort_by: sortBy, limit: 25, anime })
 
   if (result.entries.length === 0) {
     const text = `${flavor}\n\nHmm, nothing found for that~ Maybe try something else?`
@@ -258,6 +281,7 @@ async function handleSchedule(interaction: ChatInputCommandInteraction) {
   const header = `\uD83D\uDCC5 **${result.label}** (${sortLabel})`
   const pageSize = 5
   const totalPages = Math.ceil(result.entries.length / pageSize)
+  const interactionId = interaction.id
 
   function buildPage(page: number) {
     const start = page * pageSize
@@ -284,23 +308,32 @@ async function handleSchedule(interaction: ChatInputCommandInteraction) {
   }
 
   let currentPage = 0
-  const initialText = buildPage(currentPage)
-  const container = new ContainerBuilder()
-    .setAccentColor(CURIOUS_COLOR)
-    .addTextDisplayComponents(new TextDisplayBuilder().setContent(initialText))
-    .addActionRowComponents(
-      new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder()
-          .setCustomId('schedule_prev')
-          .setLabel('\u25C0 Prev')
-          .setStyle(ButtonStyle.Secondary)
-          .setDisabled(true),
-        new ButtonBuilder().setCustomId('schedule_next').setLabel('Next \u25B6').setStyle(ButtonStyle.Primary)
+
+  const buildPageContainer = (page: number, buttonsEnabled: boolean) => {
+    const container = new ContainerBuilder()
+      .setAccentColor(CURIOUS_COLOR)
+      .addTextDisplayComponents(new TextDisplayBuilder().setContent(buildPage(page)))
+    if (buttonsEnabled) {
+      container.addActionRowComponents(
+        new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`sched_prev_${interactionId}`)
+            .setLabel('\u25C0 Prev')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(page === 0),
+          new ButtonBuilder()
+            .setCustomId(`sched_next_${interactionId}`)
+            .setLabel('Next \u25B6')
+            .setStyle(ButtonStyle.Primary)
+            .setDisabled(page >= totalPages - 1)
+        )
       )
-    )
+    }
+    return container
+  }
 
   const reply = await interaction.editReply({
-    components: [container],
+    components: [buildPageContainer(currentPage, true)],
     flags: MessageFlags.IsComponentsV2 as typeof MessageFlags.IsComponentsV2
   })
 
@@ -315,58 +348,22 @@ async function handleSchedule(interaction: ChatInputCommandInteraction) {
       return
     }
 
-    if (btnInteraction.customId === 'schedule_next' && currentPage < totalPages - 1) {
+    if (btnInteraction.customId.startsWith('sched_next') && currentPage < totalPages - 1) {
       currentPage++
-    } else if (btnInteraction.customId === 'schedule_prev' && currentPage > 0) {
+    } else if (btnInteraction.customId.startsWith('sched_prev') && currentPage > 0) {
       currentPage--
     }
 
-    const updatedContainer = new ContainerBuilder()
-      .setAccentColor(CURIOUS_COLOR)
-      .addTextDisplayComponents(new TextDisplayBuilder().setContent(buildPage(currentPage)))
-      .addActionRowComponents(
-        new ActionRowBuilder<ButtonBuilder>().addComponents(
-          new ButtonBuilder()
-            .setCustomId('schedule_prev')
-            .setLabel('\u25C0 Prev')
-            .setStyle(ButtonStyle.Secondary)
-            .setDisabled(currentPage === 0),
-          new ButtonBuilder()
-            .setCustomId('schedule_next')
-            .setLabel('Next \u25B6')
-            .setStyle(ButtonStyle.Primary)
-            .setDisabled(currentPage >= totalPages - 1)
-        )
-      )
-
     await btnInteraction.update({
-      components: [updatedContainer],
+      components: [buildPageContainer(currentPage, true)],
       flags: MessageFlags.IsComponentsV2 as typeof MessageFlags.IsComponentsV2
     })
   })
 
   collector.on('end', async () => {
-    const disabledContainer = new ContainerBuilder()
-      .setAccentColor(CURIOUS_COLOR)
-      .addTextDisplayComponents(new TextDisplayBuilder().setContent(buildPage(currentPage)))
-      .addActionRowComponents(
-        new ActionRowBuilder<ButtonBuilder>().addComponents(
-          new ButtonBuilder()
-            .setCustomId('schedule_prev')
-            .setLabel('\u25C0 Prev')
-            .setStyle(ButtonStyle.Secondary)
-            .setDisabled(true),
-          new ButtonBuilder()
-            .setCustomId('schedule_next')
-            .setLabel('Next \u25B6')
-            .setStyle(ButtonStyle.Primary)
-            .setDisabled(true)
-        )
-      )
-
     await interaction
       .editReply({
-        components: [disabledContainer],
+        components: [buildPageContainer(currentPage, false)],
         flags: MessageFlags.IsComponentsV2 as typeof MessageFlags.IsComponentsV2
       })
       .catch(() => {})
@@ -419,22 +416,52 @@ async function handleWeather(interaction: ChatInputCommandInteraction) {
   return buildToolMessage(text, CURIOUS_COLOR)
 }
 
-/** Parse a time string like "3:30pm", "14:00", "1am" into minutes from now. */
-function parseTimeString(input: string): number | null {
+// ──────────────────────────────────────────────
+// Remind handler (with subcommands)
+// ──────────────────────────────────────────────
+
+function handleRemind(interaction: ChatInputCommandInteraction) {
+  const subcommand = interaction.options.getSubcommand()
+  const userId = interaction.user.id
+  const channelId = interaction.channelId
+
+  switch (subcommand) {
+    case 'in':
+      return handleRemindIn(interaction, userId, channelId)
+    case 'at':
+      return handleRemindAt(interaction, userId, channelId)
+    case 'list':
+      return handleRemindList(userId)
+    case 'cancel':
+      return handleRemindCancel(interaction, userId)
+    default:
+      return buildToolMessage("Hmm, I don't know that subcommand~", PLAYFUL_COLOR)
+  }
+}
+
+function handleRemindIn(interaction: ChatInputCommandInteraction, userId: string, channelId: string) {
+  const task = interaction.options.getString('task', true)
+  const minutes = interaction.options.getInteger('minutes', true)
+
+  const dueAt = Date.now() + minutes * 60 * 1000
+  const result = createReminder(userId, channelId, task, dueAt)
+
+  if (!result.success) {
+    return buildToolMessage(`Mou~ ${result.message}`, PLAYFUL_COLOR)
+  }
+
+  const flavor = randomFrom(FLAVOR.remind)
+  const dueTimestamp = Math.floor(dueAt / 1000)
+  const text = `${flavor}\n\n\u23F0 **Reminder set!** I'll remind you <t:${dueTimestamp}:R> (<t:${dueTimestamp}:t>)`
+  return buildToolMessage(text, PLAYFUL_COLOR)
+}
+
+function handleRemindAt(interaction: ChatInputCommandInteraction, userId: string, channelId: string) {
+  const task = interaction.options.getString('task', true)
+  const hour = interaction.options.getInteger('hour', true)
+  const minute = interaction.options.getInteger('minute') ?? 0
+
   const tz = config.timezone ?? undefined
-
-  // Match patterns like "3pm", "3:30pm", "14:00", "1am"
-  const match = input.trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i)
-  if (!match) return null
-
-  let hours = parseInt(match[1], 10)
-  const mins = parseInt(match[2] || '0', 10)
-  const period = match[3]?.toLowerCase()
-
-  if (period === 'pm' && hours < 12) hours += 12
-  if (period === 'am' && hours === 12) hours = 0
-
-  if (hours < 0 || hours > 23 || mins < 0 || mins > 59) return null
 
   // Get current time in configured timezone
   const now = new Date()
@@ -454,60 +481,65 @@ function parseTimeString(input: string): number | null {
     currentMins = now.getMinutes()
   }
 
-  const targetMinutes = hours * 60 + mins
+  const targetMinutes = hour * 60 + minute
   const currentMinutes = currentHours * 60 + currentMins
   let diff = targetMinutes - currentMinutes
 
   if (diff <= 0) diff += 24 * 60 // next day
 
-  return diff
-}
-
-function handleRemind(interaction: ChatInputCommandInteraction) {
-  const message = interaction.options.getString('message', true)
-  const minutes = interaction.options.getInteger('minutes')
-  const atTime = interaction.options.getString('at')
-  const userId = interaction.user.id
-  const channelId = interaction.channelId
-
-  // Must specify either minutes or at
-  if (!minutes && !atTime) {
-    return buildToolMessage(
-      'You need to tell me **when** to remind you~ Use the `minutes` or `at` option!',
-      PLAYFUL_COLOR
-    )
-  }
-
-  let delayMinutes: number
-
-  if (minutes) {
-    delayMinutes = minutes
-  } else {
-    // Parse the "at" time string
-    const parsed = parseTimeString(atTime!)
-    if (!parsed) {
-      return buildToolMessage(
-        "Hmm, I couldn't understand that time~ Try something like `3:30pm`, `14:00`, or `1am`!",
-        PLAYFUL_COLOR
-      )
-    }
-    delayMinutes = parsed
-    if (delayMinutes <= 0) {
-      delayMinutes += 24 * 60 // Assume next day if the time has already passed today
-    }
-  }
-
-  const result = createReminder(userId, channelId, message, Date.now() + delayMinutes * 60 * 1000)
+  const dueAt = Date.now() + diff * 60 * 1000
+  const result = createReminder(userId, channelId, task, dueAt)
 
   if (!result.success) {
     return buildToolMessage(`Mou~ ${result.message}`, PLAYFUL_COLOR)
   }
 
   const flavor = randomFrom(FLAVOR.remind)
-  const dueTimestamp = Math.floor((Date.now() + delayMinutes * 60 * 1000) / 1000)
-  const text = `${flavor}\n\n\u23F0 **Reminder set!**\n"${message}"\n\nI'll remind you <t:${dueTimestamp}:R> (<t:${dueTimestamp}:t>)`
-
+  const dueTimestamp = Math.floor(dueAt / 1000)
+  const text = `${flavor}\n\n\u23F0 **Reminder set for <t:${dueTimestamp}:t>!** I'll remind you <t:${dueTimestamp}:R>`
   return buildToolMessage(text, PLAYFUL_COLOR)
+}
+
+function handleRemindList(userId: string) {
+  const reminders = getActiveReminders(userId)
+
+  if (reminders.length === 0) {
+    return buildToolMessage('No active reminders~', PLAYFUL_COLOR)
+  }
+
+  const lines = reminders.map((r) => {
+    const ts = Math.floor(r.dueAt / 1000)
+    return `**#${r.id}** \u2014 "${r.reminder}"\nDue <t:${ts}:R> (<t:${ts}:t>)`
+  })
+
+  const container = new ContainerBuilder()
+    .setAccentColor(PLAYFUL_COLOR)
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`\u23F0 **Your Reminders**\n\n${lines.join('\n\n')}`))
+
+  return {
+    components: [container],
+    flags: MessageFlags.IsComponentsV2 as typeof MessageFlags.IsComponentsV2
+  }
+}
+
+function handleRemindCancel(interaction: ChatInputCommandInteraction, userId: string) {
+  const id = interaction.options.getInteger('id', true)
+
+  const reminder = getReminderById(id)
+
+  if (!reminder) {
+    return buildToolMessage("Hmm, I couldn't find that reminder~ Maybe it already went off?", PLAYFUL_COLOR)
+  }
+
+  if (reminder.userId !== userId) {
+    return buildToolMessage(
+      "That reminder doesn't belong to you~ You can only cancel your own reminders!",
+      PLAYFUL_COLOR
+    )
+  }
+
+  deleteReminder(id)
+  return buildToolMessage(`Got it~ Cancelled reminder **#${id}**: "${reminder.reminder}"`, PLAYFUL_COLOR)
 }
 
 const TOOL_COMMAND_NAMES = new Set([

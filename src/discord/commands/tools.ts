@@ -36,108 +36,90 @@ export const timeCommand = new SlashCommandBuilder()
 export const animeCommand = new SlashCommandBuilder()
   .setName('anime')
   .setDescription('Search for anime!')
-  .addStringOption((opt) => opt.setName('query').setDescription('Anime title to search for').setRequired(true))
-  .addStringOption((opt) =>
-    opt
-      .setName('sort_by')
-      .setDescription('Sort results by (default: relevance)')
-      .setRequired(false)
-      .addChoices(
-        { name: 'Score', value: 'score' },
-        { name: 'Popularity', value: 'popularity' },
-        { name: 'Members', value: 'members' },
-        { name: 'Title', value: 'title' },
-        { name: 'Start Date', value: 'start_date' }
-      )
+  .addSubcommand((sub) =>
+    sub
+      .setName('search')
+      .setDescription('Search anime by name')
+      .addStringOption((opt) => opt.setName('query').setDescription('Anime title to search for').setRequired(true))
   )
-  .addStringOption((opt) =>
-    opt
-      .setName('type')
-      .setDescription('Filter by type')
-      .setRequired(false)
-      .addChoices(
-        { name: 'TV', value: 'tv' },
-        { name: 'Movie', value: 'movie' },
-        { name: 'OVA', value: 'ova' },
-        { name: 'Special', value: 'special' },
-        { name: 'ONA', value: 'ona' },
-        { name: 'Music', value: 'music' }
+  .addSubcommand((sub) =>
+    sub
+      .setName('browse')
+      .setDescription('Browse anime by filters')
+      .addStringOption((opt) =>
+        opt
+          .setName('sort_by')
+          .setDescription('Sort results by')
+          .setRequired(false)
+          .addChoices(
+            { name: 'Score', value: 'score' },
+            { name: 'Popularity', value: 'popularity' },
+            { name: 'Members', value: 'members' },
+            { name: 'Title', value: 'title' },
+            { name: 'Start Date', value: 'start_date' }
+          )
       )
-  )
-  .addStringOption((opt) =>
-    opt
-      .setName('status')
-      .setDescription('Filter by status')
-      .setRequired(false)
-      .addChoices(
-        { name: 'Currently Airing', value: 'airing' },
-        { name: 'Finished', value: 'complete' },
-        { name: 'Upcoming', value: 'upcoming' }
+      .addStringOption((opt) =>
+        opt
+          .setName('type')
+          .setDescription('Filter by type')
+          .setRequired(false)
+          .addChoices(
+            { name: 'TV', value: 'tv' },
+            { name: 'Movie', value: 'movie' },
+            { name: 'OVA', value: 'ova' },
+            { name: 'ONA', value: 'ona' }
+          )
       )
-  )
-  .addIntegerOption((opt) =>
-    opt
-      .setName('limit')
-      .setDescription('Number of results (default: 5)')
-      .setRequired(false)
-      .setMinValue(1)
-      .setMaxValue(25)
+      .addStringOption((opt) =>
+        opt
+          .setName('status')
+          .setDescription('Filter by status')
+          .setRequired(false)
+          .addChoices(
+            { name: 'Currently Airing', value: 'airing' },
+            { name: 'Finished', value: 'complete' },
+            { name: 'Upcoming', value: 'upcoming' }
+          )
+      )
   )
 
 export const scheduleCommand = new SlashCommandBuilder()
   .setName('schedule')
   .setDescription('Check the anime airing schedule!')
-  .addStringOption((opt) =>
-    opt
-      .setName('anime')
-      .setDescription('Look up a specific anime broadcast schedule (skips scope/sort/limit)')
-      .setRequired(false)
+  .addSubcommand((sub) =>
+    sub
+      .setName('search')
+      .setDescription('Look up a specific anime schedule')
+      .addStringOption((opt) => opt.setName('anime').setDescription('Anime name to look up').setRequired(true))
   )
-  .addStringOption((opt) =>
-    opt
-      .setName('scope')
-      .setDescription('Time range to check (default: Today)')
-      .setRequired(false)
-      .addChoices(
-        { name: 'Today', value: 'day' },
-        { name: 'This Week', value: 'week' },
-        { name: 'This Season', value: 'season' }
+  .addSubcommand((sub) =>
+    sub
+      .setName('browse')
+      .setDescription('Browse airing schedule')
+      .addStringOption((opt) =>
+        opt
+          .setName('scope')
+          .setDescription('Time range (default: Today)')
+          .setRequired(false)
+          .addChoices(
+            { name: 'Today', value: 'day' },
+            { name: 'This Week', value: 'week' },
+            { name: 'This Season', value: 'season' }
+          )
       )
-  )
-  .addStringOption((opt) =>
-    opt
-      .setName('day')
-      .setDescription('Day of the week (only for "Today" scope)')
-      .setRequired(false)
-      .addChoices(
-        { name: 'Monday', value: 'monday' },
-        { name: 'Tuesday', value: 'tuesday' },
-        { name: 'Wednesday', value: 'wednesday' },
-        { name: 'Thursday', value: 'thursday' },
-        { name: 'Friday', value: 'friday' },
-        { name: 'Saturday', value: 'saturday' },
-        { name: 'Sunday', value: 'sunday' }
+      .addStringOption((opt) =>
+        opt
+          .setName('sort_by')
+          .setDescription('Sort results by (default: score)')
+          .setRequired(false)
+          .addChoices(
+            { name: 'Score', value: 'score' },
+            { name: 'Popularity', value: 'popularity' },
+            { name: 'Members', value: 'members' },
+            { name: 'Title', value: 'title' }
+          )
       )
-  )
-  .addStringOption((opt) =>
-    opt
-      .setName('sort_by')
-      .setDescription('Sort results by (default: score)')
-      .setRequired(false)
-      .addChoices(
-        { name: 'Score', value: 'score' },
-        { name: 'Popularity', value: 'popularity' },
-        { name: 'Members', value: 'members' },
-        { name: 'Title', value: 'title' }
-      )
-  )
-  .addIntegerOption((opt) =>
-    opt
-      .setName('limit')
-      .setDescription('Number of results (default: 5)')
-      .setRequired(false)
-      .setMinValue(1)
-      .setMaxValue(25)
   )
 
 export const weatherCommand = new SlashCommandBuilder()
@@ -153,17 +135,38 @@ export const searchCommand = new SlashCommandBuilder()
 export const remindCommand = new SlashCommandBuilder()
   .setName('remind')
   .setDescription('Ask Roka to remind you about something!')
-  .addStringOption((opt) => opt.setName('message').setDescription('What to remind you about').setRequired(true))
-  .addIntegerOption((opt) =>
-    opt
-      .setName('minutes')
-      .setDescription('Minutes from now (default: use the "at" option instead)')
-      .setRequired(false)
-      .setMinValue(1)
-      .setMaxValue(10080)
+  .addSubcommand((sub) =>
+    sub
+      .setName('in')
+      .setDescription('Set a timer-based reminder')
+      .addStringOption((opt) => opt.setName('task').setDescription('What to remind you about').setRequired(true))
+      .addIntegerOption((opt) =>
+        opt.setName('minutes').setDescription('Minutes from now').setRequired(true).setMinValue(1).setMaxValue(10080)
+      )
   )
-  .addStringOption((opt) =>
-    opt.setName('at').setDescription('Time to remind you (e.g. "3:30pm", "14:00", "1am")').setRequired(false)
+  .addSubcommand((sub) =>
+    sub
+      .setName('at')
+      .setDescription('Set a reminder for a specific time')
+      .addStringOption((opt) => opt.setName('task').setDescription('What to remind you about').setRequired(true))
+      .addIntegerOption((opt) =>
+        opt.setName('hour').setDescription('Hour (0-23)').setRequired(true).setMinValue(0).setMaxValue(23)
+      )
+      .addIntegerOption((opt) =>
+        opt
+          .setName('minute')
+          .setDescription('Minute (0-59, default: 0)')
+          .setRequired(false)
+          .setMinValue(0)
+          .setMaxValue(59)
+      )
+  )
+  .addSubcommand((sub) => sub.setName('list').setDescription('View your active reminders'))
+  .addSubcommand((sub) =>
+    sub
+      .setName('cancel')
+      .setDescription('Cancel a reminder')
+      .addIntegerOption((opt) => opt.setName('id').setDescription('Reminder ID (from /remind list)').setRequired(true))
   )
 
 export const toolCommands = [
