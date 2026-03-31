@@ -39,6 +39,9 @@ export interface GenerateResult {
 const MAX_IMAGE_SIZE_BYTES = 4 * 1024 * 1024
 const APP_NAME = 'rokabot'
 
+// Per-channel consecutive error counter — only destroy session after 2+ consecutive fallbacks
+const sessionErrorCounts = new Map<string, number>()
+
 // Reset per request to track tool fallback chains within a single invocation
 let toolCallsThisRequest: string[] = []
 
@@ -203,6 +206,8 @@ export async function destroySession(channelId: string): Promise<void> {
     clearTimeout(timer)
     idleTimers.delete(channelId)
   }
+
+  sessionErrorCounts.delete(channelId)
 
   try {
     await sessionService.deleteSession({
@@ -400,11 +405,26 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
         responseText = getRandomFallback()
       }
 
-      // Destroy session if a fallback response was returned to prevent corrupted history
-      // (e.g. ErrorRecoveryPlugin injecting model text after a functionCall turn)
+      // Track consecutive fallbacks — only destroy session after 2+ in a row
       if (KNOWN_FALLBACKS.has(responseText)) {
-        logger.warn({ channelId }, 'Fallback response detected, destroying session to prevent history corruption')
-        await destroySession(channelId)
+        const errorCount = (sessionErrorCounts.get(channelId) ?? 0) + 1
+        sessionErrorCounts.set(channelId, errorCount)
+
+        if (errorCount >= 2) {
+          logger.warn(
+            { channelId, errorCount },
+            'Consecutive fallbacks detected, destroying session to prevent corruption'
+          )
+          await destroySession(channelId)
+          sessionErrorCounts.delete(channelId)
+        } else {
+          logger.warn({ channelId, errorCount }, 'Fallback response detected, preserving session (first occurrence)')
+        }
+      }
+
+      // Reset error counter on successful (non-fallback) response
+      if (!KNOWN_FALLBACKS.has(responseText)) {
+        sessionErrorCounts.delete(channelId)
       }
 
       // Log tool fallback chains when multiple tools were called in a single request
