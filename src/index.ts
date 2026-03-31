@@ -20,6 +20,7 @@ import { logger } from './utils/logger.js'
 import { createClient } from './discord/client.js'
 import { destroyAllSessions } from './agent/roka.js'
 import { closeDb, getDb } from './storage/database.js'
+import { pruneOldHistory } from './storage/sessionStore.js'
 import { startReminderScheduler, stopReminderScheduler } from './discord/reminderScheduler.js'
 import { destroyAllGames as destroyAllShiritoriGames } from './games/shiritori.js'
 import { stopStatusCycler } from './discord/statusCycler.js'
@@ -31,6 +32,12 @@ client.once('clientReady', () => {
   // Ensure SQLite is initialized before scheduler queries it
   getDb()
   startReminderScheduler(client)
+
+  // Prune old session history on startup
+  pruneOldHistory()
+
+  // Schedule hourly pruning
+  setInterval(() => pruneOldHistory(), 60 * 60 * 1000)
 })
 
 // Lightweight health check server for monitoring

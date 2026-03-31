@@ -14,7 +14,7 @@ vi.mock('../database.js', () => ({
   getDb: () => testDb
 }))
 
-import { saveMessage, loadHistory, clearHistory } from '../sessionStore.js'
+import { saveMessage, loadHistory, clearHistory, pruneOldHistory } from '../sessionStore.js'
 
 function createTestDb(): Database.Database {
   const db = new Database(':memory:')
@@ -197,6 +197,47 @@ describe('sessionStore', () => {
 
     it('handles clearing an already empty channel', () => {
       expect(() => clearHistory('nonexistent')).not.toThrow()
+    })
+  })
+
+  describe('pruneOldHistory', () => {
+    const ONE_DAY = 24 * 60 * 60 * 1000
+    const insertStmt =
+      'INSERT INTO session_history (channel_id, role, display_name, content, timestamp) VALUES (?, ?, ?, ?, ?)'
+
+    it('deletes messages older than the threshold', () => {
+      const eightDaysAgo = Date.now() - 8 * ONE_DAY
+      testDb.prepare(insertStmt).run('ch-1', 'user', 'Alice', 'old msg', eightDaysAgo)
+
+      const deleted = pruneOldHistory(7)
+
+      expect(deleted).toBe(1)
+      expect(loadHistory('ch-1', 10)).toEqual([])
+    })
+
+    it('keeps recent messages', () => {
+      const twoDaysAgo = Date.now() - 2 * ONE_DAY
+      testDb.prepare(insertStmt).run('ch-1', 'user', 'Alice', 'recent msg', twoDaysAgo)
+
+      const deleted = pruneOldHistory(7)
+
+      expect(deleted).toBe(0)
+      expect(loadHistory('ch-1', 10)).toHaveLength(1)
+    })
+
+    it('returns correct count of deleted rows', () => {
+      const tenDaysAgo = Date.now() - 10 * ONE_DAY
+      const oneDayAgo = Date.now() - 1 * ONE_DAY
+      testDb.prepare(insertStmt).run('ch-1', 'user', 'Alice', 'old 1', tenDaysAgo)
+      testDb.prepare(insertStmt).run('ch-1', 'user', 'Alice', 'old 2', tenDaysAgo + 1000)
+      testDb.prepare(insertStmt).run('ch-2', 'user', 'Bob', 'old 3', tenDaysAgo + 2000)
+      testDb.prepare(insertStmt).run('ch-1', 'user', 'Alice', 'recent', oneDayAgo)
+
+      const deleted = pruneOldHistory(7)
+
+      expect(deleted).toBe(3)
+      const remaining = testDb.prepare('SELECT * FROM session_history').all()
+      expect(remaining).toHaveLength(1)
     })
   })
 })

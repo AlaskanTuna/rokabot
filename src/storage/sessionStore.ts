@@ -4,6 +4,7 @@
  */
 
 import { getDb } from './database.js'
+import { logger } from '../utils/logger.js'
 import type { WindowMessage } from '../session/types.js'
 
 /**
@@ -59,4 +60,18 @@ export function clearHistory(channelId: string): void {
   const db = getDb()
   const stmt = db.prepare('DELETE FROM session_history WHERE channel_id = ?')
   stmt.run(channelId)
+}
+
+/**
+ * Delete session history older than the specified number of days.
+ * Returns the number of rows deleted.
+ */
+export function pruneOldHistory(maxAgeDays: number = 7): number {
+  const db = getDb()
+  const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000
+  const result = db.prepare('DELETE FROM session_history WHERE timestamp < ?').run(cutoff)
+  if (result.changes > 0) {
+    logger.info({ pruned: result.changes, maxAgeDays }, 'Pruned old session history')
+  }
+  return result.changes
 }
