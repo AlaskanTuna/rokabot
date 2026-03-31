@@ -24,14 +24,17 @@ Rokabot responds to `/chat` slash commands, @mentions, and replies with in-chara
 ## Features
 
 - **In-character roleplay** -- Maniwa Roka personality with 12 dynamic tones and Components V2 styled responses
-- **Multiple triggers** -- `/chat`, @mentions, replies, and image perception
+- **Multiple triggers** -- `/chat`, @mentions, replies (with poll, forward, and sticker context), and image perception
+- **Image pre-processing** -- `sharp`-based resize, sharpen, and normalize pipeline for optimal Gemini vision input
 - **10 agent tools** -- dice, coin, clock, anime search, schedule, weather, web search, user memory, reminders
-- **3 mini-games** -- `/shiritori`, `/gacha`, `/hangman` with leaderboards and guides
-- **Per-user memory** -- remembers nicknames, favorites, and personal details across sessions
-- **Reminders** -- set via conversation or `/remind` command, with timezone-aware scheduling
+- **3 mini-games** -- `/shiritori`, `/gacha` (buddy pets), `/hangman` with leaderboards and guides
+- **Buddy pet system** -- hatch a deterministic VN companion spirit (18 species, 5 rarity tiers, 5 stats)
+- **Per-user memory** -- remembers nicknames, favorites, and personal details across sessions (user ID auto-injected)
+- **Reminders** -- set via conversation or `/remind` command, with timezone-aware scheduling and DM fallback
 - **SQLite persistence** -- sessions, memory, reminders, and game scores survive restarts
+- **Session history auto-pruning** -- hourly cleanup of history older than 7 days
 - **Passive emoji reactions** -- contextual emoji reactions on guild messages (probability-gated)
-- **Dynamic status** -- bot presence cycles based on time of day
+- **Dynamic status** -- bot presence cycles through time-of-day activities every 15 minutes
 
 ---
 
@@ -41,16 +44,19 @@ Rokabot responds to `/chat` slash commands, @mentions, and replies with in-chara
 graph TD
     User((User)) -->|"/chat, @mention, reply"| Discord
     Discord["Discord Layer\nRate limit + Concurrency guard"] --> Agent
+    Discord -->|image attachment| Sharp["sharp\nResize, sharpen, normalize"]
+    Sharp -->|optimized buffer| Agent
     Agent["Roka Agent (ADK)\n4-layer prompt + Tone detection"] -->|prompt + history| Gemini
     Gemini["Gemini Flash Lite"] -->|tool call?| Tools
     Tools["10 Tools\nDice, Coin, Time, Anime, Schedule,\nWeather, Web Search, Remember,\nRecall, Reminder"] -->|result| Gemini
     Gemini -->|response| Pipeline
     Pipeline["Response Pipeline\nComponents V2 + Tone styling"] -->|styled reply| User
     Discord -->|"/shiritori, /gacha, /hangman"| Games
-    Games["Game Engine\nShiritori, Gacha, Hangman"] -->|game response| User
+    Games["Game Engine\nShiritori, Buddy Pets, Hangman"] -->|game response| User
     Agent -->|read/write| SQLite
-    Games -->|scores, collections| SQLite
-    SQLite[("SQLite\nSessions, User Memory,\nReminders, Game Scores")]
+    Games -->|scores, buddies| SQLite
+    SQLite[("SQLite\nSessions, User Memory,\nReminders, Game Scores,\nBuddy Pets")]
+    SQLite -->|hourly prune| Prune["Session History\nAuto-Pruning (7 days)"]
 ```
 
 <details>
@@ -64,9 +70,9 @@ flowchart LR
     Reaction -->|Maybe 33%| React["React with emoji"]
     Reaction --> Guards{Rate limit +\nconcurrency OK?}
     Guards -->|No| Reject([Decline / busy])
-    Guards -->|Yes| Gacha{Gacha keyword?}
-    Gacha -->|Yes| Draw["Gacha draw\n(skip LLM)"]
-    Gacha -->|No| Session["Get or create\nADK session"]
+    Guards -->|Yes| Buddy{Buddy keyword?}
+    Buddy -->|Yes| Hatch["Buddy hatch\n(skip LLM)"]
+    Buddy -->|No| Session["Get or create\nADK session"]
     Session --> Rehydrate{"Cold start?\n(no in-memory session)"}
     Rehydrate -->|Yes| Load["Load history\nfrom SQLite"]
     Rehydrate -->|No| Prompt
@@ -141,7 +147,7 @@ flowchart TD
 <details>
 <summary><strong>Session & Persistence</strong></summary>
 
-Sessions are per-channel, with in-memory ADK sessions as the hot path and SQLite as persistent backing store:
+Sessions are per-channel, with in-memory ADK sessions as the hot path and SQLite as persistent backing store. Session history older than 7 days is automatically pruned on an hourly interval.
 
 ```mermaid
 flowchart LR
@@ -155,18 +161,18 @@ flowchart LR
     Idle -->|Yes| Destroy["Destroy in-memory\nsession"]
     Idle -->|No| Wait["Wait for\nnext message"]
     Window --> Persist["Write-behind\nto SQLite"]
+    Persist --> Prune["Hourly prune\n(> 7 days old)"]
 ```
 
 SQLite tables:
 
-| Table              | Purpose                                    |
-| ------------------ | ------------------------------------------ |
-| `session_history`  | Conversation messages for rehydration      |
-| `user_memory`      | Per-user facts (max 10 per user)           |
-| `reminders`        | Scheduled reminders with delivery tracking |
-| `game_scores`      | Shiritori and hangman scores               |
-| `gacha_collection` | Per-user gacha item collection             |
-| `gacha_daily`      | Daily draw limit tracking                  |
+| Table             | Purpose                                    |
+| ----------------- | ------------------------------------------ |
+| `session_history` | Conversation messages for rehydration      |
+| `user_memory`     | Per-user facts (max 10 per user)           |
+| `reminders`       | Scheduled reminders with delivery tracking |
+| `game_scores`     | Shiritori and hangman scores               |
+| `buddy`           | Per-user companion spirit data and stats   |
 
 </details>
 
@@ -234,6 +240,7 @@ flowchart LR
 **How it works:**
 
 - When a user speaks, their stored facts are fetched from SQLite and appended to the system prompt (~50-100 tokens). Roka "just knows" these things without needing to call any tool.
+- The current user's Discord ID is auto-injected into the system prompt so tools like `remember_user` and `recall_user` always target the correct user without the LLM needing to know the ID.
 - During conversation, if Roka decides something is worth remembering (e.g., "call me Ali" or "I love Frieren"), she calls `remember_user` — the LLM decides when to use this, not a rule engine.
 - Facts are capped at 10 per user. When a new fact exceeds the cap, the oldest is evicted.
 - Facts persist across bot restarts via SQLite.
@@ -298,23 +305,53 @@ Three built-in mini-games with slash command interfaces:
 flowchart TD
     Slash(["/shiritori, /gacha, /hangman"]) --> Router["Game Command\nRouter"]
     Router --> S["Shiritori\n(word chain)"]
-    Router --> G["Gacha\n(daily draw)"]
+    Router --> G["Buddy Pets\n(hatch + interact)"]
     Router --> H["Hangman\n(word guess)"]
     S --> State["In-memory\ngame state"]
     H --> State
-    G --> DB[("SQLite\ncollections")]
+    G --> DB[("SQLite\nbuddy table")]
     State --> Scores["Save scores\nto SQLite"]
 ```
 
-| Game      | Command      | Description                                                                                                   |
-| --------- | ------------ | ------------------------------------------------------------------------------------------------------------- |
-| Shiritori | `/shiritori` | Word chain game. Each word must start with the last letter of the previous. Multi-player, turn-based, scored. |
-| Gacha     | `/gacha`     | Daily fortune draw with 4 rarity tiers (common/uncommon/rare/legendary). Persistent collection tracking.      |
-| Hangman   | `/hangman`   | Classic word guessing with ~120 anime/VN/Japanese-culture terms. 6 lives, emoji gallows art.                  |
+| Game       | Command      | Description                                                                                                   |
+| ---------- | ------------ | ------------------------------------------------------------------------------------------------------------- |
+| Shiritori  | `/shiritori` | Word chain game. Each word must start with the last letter of the previous. Multi-player, turn-based, scored. |
+| Buddy Pets | `/gacha`     | Hatch a deterministic VN companion spirit with 18 species across 5 rarity tiers and 5 stats.                  |
+| Hangman    | `/hangman`   | Classic word guessing with ~120 anime/VN/Japanese-culture terms. 6 lives, emoji gallows art.                  |
 
-- Gacha can also be triggered via @mention with keywords: `gacha`, `draw`, `fortune`, `omikuji`
+- Buddy pets can also be triggered via @mention with keywords: `gacha`, `draw`, `buddy`, `hatch`
 - Shiritori and hangman have 120-second auto-timeout per turn
 - Scores persist to SQLite across restarts
+
+</details>
+
+<details>
+<summary><strong>Slash Commands Reference</strong></summary>
+
+| Command              | Description                                                          |
+| -------------------- | -------------------------------------------------------------------- |
+| `/chat`              | Start a conversation with Roka                                       |
+| `/roll_dice`         | Roll NdM dice                                                        |
+| `/flip_coin`         | Flip a coin                                                          |
+| `/time`              | Timezone-aware clock                                                 |
+| `/weather`           | Current weather by city                                              |
+| `/search`            | Web search                                                           |
+| `/anime search`      | Search anime by name                                                 |
+| `/anime browse`      | Browse anime by filters                                              |
+| `/schedule search`   | Look up a specific anime schedule                                    |
+| `/schedule browse`   | Browse airing schedule                                               |
+| `/remind in`         | Set a timer-based reminder                                           |
+| `/remind at`         | Set a reminder for a specific time                                   |
+| `/remind list`       | View active reminders                                                |
+| `/remind cancel`     | Cancel a reminder by ID                                              |
+| `/shiritori`         | Word chain game (start, join, play, end, scores, guide, leaderboard) |
+| `/hangman`           | Word guessing game (start, guess, guide, leaderboard)                |
+| `/gacha hatch`       | Hatch your companion spirit                                          |
+| `/gacha view`        | View your companion                                                  |
+| `/gacha pet`         | Interact with your companion                                         |
+| `/gacha stats`       | View companion's detailed stats                                      |
+| `/gacha guide`       | Learn about the companion system                                     |
+| `/gacha leaderboard` | View top companions by stats                                         |
 
 </details>
 
@@ -353,6 +390,7 @@ rokabot/
 │   │   ├── concurrency.ts             # Per-channel concurrency guard
 │   │   ├── emojiReactor.ts            # Passive emoji reactions (rule-based, probability-gated)
 │   │   ├── reminderScheduler.ts       # 60-second interval reminder delivery
+│   │   ├── statusCycler.ts            # Dynamic bot status cycling (time-of-day)
 │   │   ├── responses.ts               # In-character message pools
 │   │   ├── messageBuilder.ts          # Components V2 message builder
 │   │   ├── expressions.ts             # Tone → expression mapping
@@ -370,11 +408,11 @@ rokabot/
 │   │       └── gachaMention.ts        # Gacha @mention keyword handler
 │   ├── games/
 │   │   ├── shiritori.ts               # Shiritori game state manager
-│   │   ├── gacha.ts                   # Gacha draw system (weighted rarity, daily limit)
+│   │   ├── buddy.ts                   # Buddy pet system (hatch, pet, stats, leaderboard)
 │   │   ├── hangman.ts                 # Hangman game state manager
 │   │   └── data/
 │   │       ├── wordlist.json          # ~5700 English words for shiritori validation
-│   │       ├── gachaItems.ts          # 43 collectible items across 4 rarity tiers
+│   │       ├── buddySpecies.ts        # 18 species across 5 rarity tiers with stats
 │   │       └── hangmanWords.ts        # ~120 anime/VN/Japanese-culture terms with hints
 │   ├── storage/
 │   │   ├── database.ts                # SQLite initialization, schema, singleton
@@ -387,7 +425,8 @@ rokabot/
 │   │   └── sessionManager.ts          # Session lifecycle manager
 │   └── utils/
 │       ├── logger.ts                  # pino structured logger
-│       └── rateLimiter.ts             # Token bucket (RPM) + daily counter (RPD)
+│       ├── rateLimiter.ts             # Token bucket (RPM) + daily counter (RPD)
+│       └── imageProcessor.ts          # sharp-based image pre-processing for Gemini vision
 ├── scripts/
 │   ├── test-chat.ts                   # CLI test script for rapid prompt iteration
 │   ├── test-adk-smoke.ts              # Automated ADK smoke test (tools, response quality)
@@ -420,9 +459,10 @@ rokabot/
 | Agent Framework | @google/adk           | LlmAgent + Runner with FunctionTools          |
 | LLM             | Gemini 3.1 Flash Lite | `gemini-3.1-flash-lite-preview`               |
 | Database        | better-sqlite3        | Synchronous SQLite for persistence            |
+| Image           | sharp                 | Resize, sharpen, normalize for Gemini vision  |
 | Validation      | Zod                   | Tool parameter schemas                        |
 | Logging         | pino                  | Structured JSON, pino-pretty in dev           |
-| Testing         | vitest                | 317 tests, TypeScript-native                  |
+| Testing         | vitest                | 314 tests, TypeScript-native                  |
 | Deployment      | Docker Compose        | Multi-stage build, node:24-alpine             |
 
 ---
@@ -526,7 +566,7 @@ npm start              # Run compiled JS (production)
 npm run lint           # ESLint
 npm run format         # Prettier (write)
 npm run format:check   # Prettier (check only)
-npm test               # Run all tests (317 tests)
+npm test               # Run all tests (314 tests)
 npm run test:watch     # Tests in watch mode
 
 # Docker
