@@ -19,7 +19,7 @@ import { config } from './config.js'
 import { logger } from './utils/logger.js'
 import { createClient } from './discord/client.js'
 import { destroyAllSessions } from './agent/roka.js'
-import { closeDb } from './storage/database.js'
+import { closeDb, getDb } from './storage/database.js'
 import { startReminderScheduler, stopReminderScheduler } from './discord/reminderScheduler.js'
 import { destroyAllGames as destroyAllShiritoriGames } from './games/shiritori.js'
 import { stopStatusCycler } from './discord/statusCycler.js'
@@ -27,7 +27,9 @@ import { stopStatusCycler } from './discord/statusCycler.js'
 const client = createClient()
 
 // Start the reminder scheduler once Discord is ready
-client.once('ready', () => {
+client.once('clientReady', () => {
+  // Ensure SQLite is initialized before scheduler queries it
+  getDb()
   startReminderScheduler(client)
 })
 

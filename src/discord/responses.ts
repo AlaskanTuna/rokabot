@@ -21,15 +21,6 @@ const BUSY_MESSAGES = [
   "One thing at a time~ I'm almost done, I promise!"
 ]
 
-const EMPTY_MENTION_MESSAGES = [
-  'Hm? Did you need something?',
-  "You called? I'm right here, you know.",
-  "...You're just going to stare at me? Use your words.",
-  "Yes, yes, I'm here~ What is it?",
-  "Did you just call my name to get my attention? ...That's kind of sweet, actually.",
-  'Fufu~ if you want to talk, just say so~'
-]
-
 const ERROR_MESSAGES = [
   'Nn... something feels off. Let me try again in a bit, okay?',
   "Ah, that's strange... my thoughts got all jumbled up. Give me a moment.",
@@ -46,10 +37,6 @@ export function getRandomBusy(): string {
 
 export function getRandomError(): string {
   return ERROR_MESSAGES[Math.floor(Math.random() * ERROR_MESSAGES.length)]
-}
-
-export function getRandomEmptyMention(): string {
-  return EMPTY_MENTION_MESSAGES[Math.floor(Math.random() * EMPTY_MENTION_MESSAGES.length)]
 }
 
 /**
