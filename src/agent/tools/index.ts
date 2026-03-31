@@ -129,22 +129,26 @@ export const searchWebTool = new FunctionTool({
 export const rememberUserTool = new FunctionTool({
   name: 'remember_user',
   description:
-    'Remember a fact about a user. Use when someone shares personal details worth remembering — their name preference, favorite anime, hobbies, birthday, etc. Only store genuinely useful facts, not temporary conversation details.',
+    'Remember a fact about the current user. Use when someone shares personal details worth remembering — their name preference, favorite anime, hobbies, birthday, etc. Only store genuinely useful facts, not temporary conversation details. The user ID is filled in automatically.',
   parameters: z.object({
-    user_id: z.string().describe('The Discord user ID of the user (numeric string)'),
     fact_key: z.string().describe('A short label for the fact (e.g. "favorite_anime", "nickname", "birthday")'),
     fact_value: z.string().describe('The value of the fact (e.g. "Frieren", "Ali", "March 15")')
   }),
-  execute: async (input) => rememberUser(input)
+  execute: async (input, toolContext) => {
+    const userId = toolContext?.state?.get<string>('_userId') ?? 'unknown'
+    return rememberUser({ user_id: userId, fact_key: input.fact_key, fact_value: input.fact_value })
+  }
 })
 
 export const recallUserTool = new FunctionTool({
   name: 'recall_user',
-  description: 'Recall stored facts about a user. Use when you want to check what you remember about someone.',
-  parameters: z.object({
-    user_id: z.string().describe('The Discord user ID of the user (numeric string)')
-  }),
-  execute: async (input) => recallUser(input)
+  description:
+    'Recall stored facts about the current user. Use when you want to check what you remember about them. The user ID is filled in automatically.',
+  parameters: z.object({}),
+  execute: async (_input, toolContext) => {
+    const userId = toolContext?.state?.get<string>('_userId') ?? 'unknown'
+    return recallUser({ user_id: userId })
+  }
 })
 
 export const setReminderTool = new FunctionTool({
