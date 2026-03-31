@@ -122,9 +122,9 @@ describe('shouldReact', () => {
 
     it('reacts to excitement with celebration emoji', () => {
       vi.spyOn(Math, 'random').mockReturnValue(0)
-      const emoji = shouldReact('that was amazing!', 'ch1')
+      const emoji = shouldReact('woohoo we did it!', 'ch1')
       expect(emoji).toBeDefined()
-      expect(['🎉', '✨']).toContain(emoji)
+      expect(['🎉', '✨', '💯']).toContain(emoji)
     })
 
     it('reacts to congrats', () => {
@@ -157,14 +157,14 @@ describe('shouldReact', () => {
   })
 
   describe('probability gate', () => {
-    it('reacts when random is below threshold (0.18)', () => {
-      vi.spyOn(Math, 'random').mockReturnValue(0.17)
+    it('reacts when random is below threshold (0.33)', () => {
+      vi.spyOn(Math, 'random').mockReturnValue(0.32)
       const emoji = shouldReact('good morning', 'ch1')
       expect(emoji).toBe('👋')
     })
 
-    it('does not react when random is at threshold (0.18)', () => {
-      vi.spyOn(Math, 'random').mockReturnValue(0.18)
+    it('does not react when random is at threshold (0.33)', () => {
+      vi.spyOn(Math, 'random').mockReturnValue(0.33)
       const emoji = shouldReact('good morning', 'ch1')
       expect(emoji).toBeNull()
     })
@@ -201,8 +201,8 @@ describe('shouldReact', () => {
       const first = shouldReact('good morning', 'ch1')
       expect(first).toBe('👋')
 
-      // Advance time past cooldown (60 seconds)
-      vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 61_000)
+      // Advance time past cooldown (180 seconds)
+      vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 181_000)
 
       const second = shouldReact('good morning', 'ch1')
       expect(second).toBe('👋')
