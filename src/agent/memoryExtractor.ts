@@ -19,21 +19,27 @@ function getClient(): GoogleGenAI {
   return genaiClient
 }
 
-const EXTRACTION_PROMPT = `You are a fact extractor. Given a conversation between users, extract personal facts and behavioral cues about the USERS.
+const EXTRACTION_PROMPT = `You are a fact extractor. Given a conversation, extract ANY personal detail or behavioral signal about the USERS (not the bot/assistant).
 
-Rules:
-- Extract concrete facts: names/nicknames, preferences, favorites, hobbies, birthdays, locations, relationships
-- Extract lifestyle cues: pets, daily habits, occupation, routines, what they're currently watching/playing/reading
-- Extract current interests: ongoing activities, recent events in their life, things they're excited about
-- Extract personality traits: humor style, recurring topics, how they interact with others
-- Do NOT extract temporary emotions ("I'm bored right now"), reactions to the conversation itself, or facts about the assistant/bot
-- Do NOT extract facts that are questions or uncertain ("I might like...")
-- Each fact needs: the user's name (from the [Name] prefix), a short descriptive key, and the value
-- Prefer specific keys like "currently_watching", "has_pet", "occupation", "hobby" over vague ones
-- If no facts are worth extracting, return an empty array
+Extract generously — even small or indirect clues count. Categories:
+- Identity: names, nicknames, age, gender, height, nationality, language spoken, location
+- Lifestyle: occupation, school, pets, daily routine, sleep schedule, diet
+- Interests: games, anime, music, shows, hobbies, sports, things they mention enjoying or disliking
+- Social: relationships, who they hang out with, friend groups, how they talk to others
+- Personality: humor style, catchphrases, recurring jokes, teasing habits, communication style
+- Opinions: strong likes/dislikes, preferences, things they recommend or complain about
+- Current state: what they're doing today, plans, recent events, mood patterns over time
 
-Return ONLY a JSON array, no markdown, no explanation:
-[{"userId":"Alice","key":"currently_watching","value":"Dandadan"},{"userId":"Bob","key":"has_pet","value":"cat"}]
+Guidelines:
+- Infer from context: "I just got home from work" → occupation is likely office worker
+- Capture opinions: "ugh I hate horror games" → dislikes horror games
+- Capture habits: if someone always greets in Japanese → communication_style: uses Japanese greetings
+- Skip: single-use reactions to the conversation itself, facts about the bot/assistant
+- Each fact: user's display name (from [Name] prefix), a descriptive snake_case key, and the value
+- When uncertain, still extract with the value reflecting the uncertainty ("probably a student")
+
+Return ONLY a JSON array:
+[{"userId":"Alice","key":"currently_watching","value":"Dandadan"},{"userId":"Bob","key":"dislikes","value":"horror games"}]
 Or if none: []
 
 Conversation:
@@ -74,9 +80,10 @@ async function runBufferExtraction(channelId: string, messages: BufferedMessage[
 
   const prompt = EXTRACTION_PROMPT + conversationText
 
+  // Case-insensitive map so LLM name variations ("hiro" vs "Hiro") still resolve
   const userMap = new Map<string, string>()
   for (const m of messages) {
-    userMap.set(m.displayName, m.userId)
+    userMap.set(m.displayName.toLowerCase(), m.userId)
   }
 
   try {
@@ -85,8 +92,8 @@ async function runBufferExtraction(channelId: string, messages: BufferedMessage[
       model: config.gemini.model,
       contents: prompt,
       config: {
-        temperature: 0.1,
-        maxOutputTokens: 200,
+        temperature: 0.3,
+        maxOutputTokens: 400,
         httpOptions: { timeout: 15_000 }
       }
     })
@@ -102,7 +109,11 @@ async function runBufferExtraction(channelId: string, messages: BufferedMessage[
 
     let savedCount = 0
     for (const fact of facts) {
-      const resolvedUserId = userMap.get(fact.userId) ?? fact.userId
+      const resolvedUserId = userMap.get(fact.userId.toLowerCase())
+      if (!resolvedUserId) {
+        logger.debug({ name: fact.userId, channelId }, 'Skipping fact — display name not found in userMap')
+        continue
+      }
       const existingFacts = getFacts(resolvedUserId)
       const alreadyExists = existingFacts.some((f) => f.key === fact.key && f.value === fact.value)
       if (!alreadyExists) {

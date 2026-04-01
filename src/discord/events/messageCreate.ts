@@ -75,6 +75,11 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
       }
     }
 
+    // Activate monitoring before buffering so first @mention is captured
+    if (isMentioned || isReplyToBot) {
+      markActive(message.channelId)
+    }
+
     if (message.guild && !message.author.bot && isMonitored(message.channelId)) {
       const msgContent = message.content.replace(/<@!?\d+>/g, '').trim()
       if (msgContent) {
@@ -93,7 +98,6 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
     if (!isMentioned && !isReplyToBot) return
 
     const channelId = message.channelId
-    markActive(channelId)
     const displayName = message.member?.displayName ?? message.author.displayName
 
     let content = message.content.replace(/<@!?\d+>/g, '').trim()
@@ -271,6 +275,15 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
       for (let i = 1; i < chunks.length; i++) {
         if ('send' in message.channel) {
           await message.channel.send(buildRokaMessage(chunks[i], tone))
+        }
+      }
+
+      // Add bot response to passive buffer for richer extraction context
+      if (message.guild && client.user && isMonitored(channelId)) {
+        const botName = message.guild.members.me?.displayName ?? client.user.displayName
+        const bufCount = addToPassiveBuffer(channelId, client.user.id, botName, responseText)
+        if (bufCount >= EXTRACTION_INTERVAL) {
+          maybeExtractFromBuffer(channelId)
         }
       }
     } catch (error) {
