@@ -29,7 +29,7 @@ Rokabot responds to `/chat` slash commands, @mentions, and replies with in-chara
 - **10 agent tools** -- dice, coin, clock, anime search, schedule, weather, web search, user memory, reminders
 - **3 mini-games** -- `/shiritori`, `/gacha` (buddy pets), `/hangman` with leaderboards and guides
 - **Buddy pet system** -- hatch a deterministic VN companion spirit (18 species, 5 rarity tiers, 5 stats)
-- **Per-user memory** -- remembers nicknames, favorites, and personal details across sessions (user ID auto-injected)
+- **Per-user memory** -- remembers nicknames, favorites, and personal details across sessions via background extraction every 10 messages
 - **Reminders** -- set via conversation or `/remind` command, with timezone-aware scheduling and DM fallback
 - **SQLite persistence** -- sessions, memory, reminders, and game scores survive restarts
 - **Session history auto-pruning** -- hourly cleanup of history older than 7 days
@@ -220,38 +220,40 @@ All 33 character expressions are assigned uniquely across tones — no expressio
 <details>
 <summary><strong>Per-User Relationship Memory</strong></summary>
 
-Roka remembers facts about individual users across sessions. This system is built on two ADK tools (`remember_user` and `recall_user`) backed by SQLite, plus automatic fact injection into the system prompt.
+Roka remembers facts about individual users across sessions. Facts are extracted passively via a background process and also available through explicit ADK tools.
 
 ```mermaid
-flowchart LR
-    User([User sends message]) --> Fetch["Fetch user facts\nfrom SQLite"]
-    Fetch --> Inject{"Facts exist?"}
+flowchart TD
+    User([User sends message]) --> Counter["Message counter\n(per channel)"]
+    Counter --> Check{"Every 10th\nmessage?"}
+    Check -->|No| Fetch
+    Check -->|Yes| Extract["Background Gemini call\n(separate from conversation)"]
+    Extract --> Parse["Parse JSON facts\nfor ALL users in window"]
+    Parse --> Save["Save new facts\nto SQLite"]
+    Fetch["Fetch user facts\nfrom SQLite"] --> Inject{"Facts exist?"}
     Inject -->|Yes| Append["Append to system prompt:\n'You remember about Alice:\nshe prefers Ali, likes Frieren...'"]
     Inject -->|No| Skip["No injection"]
     Append --> LLM["Send to Gemini\n(Roka has context)"]
     Skip --> LLM
-    LLM --> Decide{"Roka decides\nsomething is worth\nremembering?"}
-    Decide -->|Yes| Tool["Calls remember_user tool\n(user_id, fact_key, fact_value)"]
-    Decide -->|No| Respond([Reply normally])
-    Tool --> SQLite[("SQLite\nuser_memory table")]
-    SQLite --> Respond
 ```
 
 **How it works:**
 
-- When a user speaks, their stored facts are fetched from SQLite and appended to the system prompt (~50-100 tokens). Roka "just knows" these things without needing to call any tool.
-- The current user's Discord ID is auto-injected into the system prompt so tools like `remember_user` and `recall_user` always target the correct user without the LLM needing to know the ID.
-- During conversation, if Roka decides something is worth remembering (e.g., "call me Ali" or "I love Frieren"), she calls `remember_user` — the LLM decides when to use this, not a rule engine.
+- **Background extraction**: Every 10 messages in a channel, the conversation window is sent to a separate Gemini call (not through the ADK session) with a focused extraction prompt. This extracts facts for ALL users in the window — not just the current speaker.
+- **Prompt injection**: When a user speaks, their stored facts are fetched from SQLite and appended to the system prompt (~50-100 tokens). Roka "just knows" these things.
+- **Explicit tools**: `remember_user` and `recall_user` ADK tools are still available for direct @mention requests like "remember that my birthday is March 15" or "what do you know about me."
+- **User ID auto-injection**: Discord user IDs are resolved automatically — the LLM never needs to know them.
 - Facts are capped at 10 per user. When a new fact exceeds the cap, the oldest is evicted.
 - Facts persist across bot restarts via SQLite.
 
-| Aspect     | Detail                                                                 |
-| ---------- | ---------------------------------------------------------------------- |
-| Storage    | SQLite `user_memory` table (user_id, fact_key, fact_value, updated_at) |
-| Cap        | 10 facts per user, oldest evicted on overflow                          |
-| Injection  | Appended to system prompt at request time, ~50-100 tokens              |
-| Tools      | `remember_user` (save), `recall_user` (explicit recall)                |
-| Token cost | Near-zero — facts are short strings, no LLM calls for retrieval        |
+| Aspect             | Detail                                                                              |
+| ------------------ | ----------------------------------------------------------------------------------- |
+| Storage            | SQLite `user_memory` table (user_id, fact_key, fact_value, updated_at)              |
+| Cap                | 10 facts per user, oldest evicted on overflow                                       |
+| Passive extraction | Every 10 messages, background Gemini call (~1 extra RPM per 10 msgs)                |
+| Prompt injection   | Appended to system prompt at request time, ~50-100 tokens                           |
+| Explicit tools     | `remember_user` (save), `recall_user` (recall), `list_reminders`, `cancel_reminder` |
+| Deduplication      | Skips saving if identical key+value already exists                                  |
 
 </details>
 
@@ -367,6 +369,7 @@ rokabot/
 │   │   ├── roka.ts                    # ADK LlmAgent + Runner, session management, SQLite integration
 │   │   ├── toneDetector.ts            # Rule-based tone detection (keyword matching, 12 tones)
 │   │   ├── promptAssembler.ts         # 4-layer prompt combiner
+│   │   ├── memoryExtractor.ts        # Background fact extraction (every 10 messages)
 │   │   ├── prompts/
 │   │   │   ├── core.ts                # Layer 0: Core identity, personality, abilities
 │   │   │   ├── speech.ts              # Layer 1: Speech patterns & formatting rules
