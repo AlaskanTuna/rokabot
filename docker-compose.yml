@@ -5,6 +5,11 @@ services:
     env_file: .env
     environment:
       - ADK_QUIET=1
+    labels:
+      panel.type: bot
+      panel.name: Maniwa Roka
+      panel.icon: "\U0001F361"
+      panel.db: /home/adam/rokabot/data/rokabot.db
     mem_limit: 512m
     ports:
       - '3000:3000'
