@@ -5,6 +5,7 @@
 
 import { FunctionTool } from '@google/adk'
 import { z } from 'zod'
+import { config } from '../../config.js'
 import { rollDice } from './rollDice.js'
 import { flipCoin } from './flipCoin.js'
 import { getCurrentTime } from './getCurrentTime.js'
@@ -154,19 +155,60 @@ export const recallUserTool = new FunctionTool({
 export const setReminderTool = new FunctionTool({
   name: 'set_reminder',
   description:
-    'Set a reminder for the current user. Use when someone asks you to remind them about something. You can set reminders from 1 minute to 7 days in the future. The user and channel are filled in automatically.',
+    'Set a reminder for the current user. Use EITHER delay_minutes (for "in X minutes") OR target_hour+target_minute (for "at 3pm"). Do NOT call get_current_time first when using target_hour — the tool computes the delay automatically. The user and channel are filled in automatically.',
   parameters: z.object({
     reminder: z.string().describe('What to remind them about'),
-    delay_minutes: z.number().describe('Minutes from now until the reminder (1-10080, i.e., up to 7 days)')
+    delay_minutes: z
+      .number()
+      .describe('Minutes from now until the reminder (1-10080). Use this for "in X minutes" requests.')
+      .optional(),
+    target_hour: z
+      .number()
+      .describe('Target hour (0-23) for "at X:XXpm" requests. The tool computes the delay automatically.')
+      .optional(),
+    target_minute: z.number().describe('Target minute (0-59, default 0). Use with target_hour.').optional()
   }),
   execute: async (input, toolContext) => {
     const userId = toolContext?.state?.get<string>('_userId') ?? 'unknown'
     const channelId = toolContext?.state?.get<string>('_channelId') ?? 'unknown'
+
+    let delayMinutes: number
+
+    if (input.target_hour !== undefined) {
+      // Compute delay from target clock time using configured timezone
+      const tz = config.timezone ?? undefined
+      const now = new Date()
+      let currentHours: number, currentMins: number
+      try {
+        const formatter = new Intl.DateTimeFormat('en-US', {
+          hour: 'numeric',
+          minute: 'numeric',
+          hour12: false,
+          timeZone: tz
+        })
+        const parts = formatter.format(now).split(':')
+        currentHours = parseInt(parts[0], 10)
+        currentMins = parseInt(parts[1], 10)
+      } catch {
+        currentHours = now.getHours()
+        currentMins = now.getMinutes()
+      }
+
+      const targetMins = input.target_hour * 60 + (input.target_minute ?? 0)
+      const currentTotalMins = currentHours * 60 + currentMins
+      delayMinutes = targetMins - currentTotalMins
+      if (delayMinutes <= 0) delayMinutes += 24 * 60
+    } else if (input.delay_minutes !== undefined) {
+      delayMinutes = input.delay_minutes
+    } else {
+      return { success: false, message: 'Specify either delay_minutes or target_hour.' }
+    }
+
     return setReminder({
       user_id: userId,
       channel_id: channelId,
       reminder: input.reminder,
-      delay_minutes: input.delay_minutes
+      delay_minutes: delayMinutes
     })
   }
 })
