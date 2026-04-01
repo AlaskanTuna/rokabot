@@ -90,7 +90,7 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
           msgContent
         )
         if (count >= EXTRACTION_INTERVAL) {
-          maybeExtractFromBuffer(message.channelId)
+          maybeExtractFromBuffer(message.channelId, client.user?.id)
         }
       }
     }
@@ -283,7 +283,7 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
         const botName = message.guild.members.me?.displayName ?? client.user.displayName
         const bufCount = addToPassiveBuffer(channelId, client.user.id, botName, responseText)
         if (bufCount >= EXTRACTION_INTERVAL) {
-          maybeExtractFromBuffer(channelId)
+          maybeExtractFromBuffer(channelId, client.user.id)
         }
       }
     } catch (error) {

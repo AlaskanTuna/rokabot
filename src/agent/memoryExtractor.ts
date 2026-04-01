@@ -52,7 +52,7 @@ interface ExtractedFact {
 }
 
 /** Trigger background extraction when the passive buffer reaches capacity */
-export function maybeExtractFromBuffer(channelId: string): void {
+export function maybeExtractFromBuffer(channelId: string, botUserId?: string): void {
   const messages = getMessages(channelId)
   if (messages.length < config.memory.extractionInterval) return
 
@@ -67,13 +67,13 @@ export function maybeExtractFromBuffer(channelId: string): void {
 
   clearBuffer(channelId)
 
-  void runBufferExtraction(channelId, messages).catch((error) => {
+  void runBufferExtraction(channelId, messages, botUserId).catch((error) => {
     logger.warn({ channelId, error }, 'Passive buffer memory extraction failed')
   })
 }
 
 /** Run extraction from the passive buffer messages */
-async function runBufferExtraction(channelId: string, messages: BufferedMessage[]): Promise<void> {
+async function runBufferExtraction(channelId: string, messages: BufferedMessage[], botUserId?: string): Promise<void> {
   const conversationText = messages.map((m) => `[${m.displayName}]: ${m.content}`).join('\n')
 
   if (!conversationText.trim()) return
@@ -114,6 +114,7 @@ async function runBufferExtraction(channelId: string, messages: BufferedMessage[
         logger.debug({ name: fact.userId, channelId }, 'Skipping fact — display name not found in userMap')
         continue
       }
+      if (botUserId && resolvedUserId === botUserId) continue
       const existingFacts = getFacts(resolvedUserId)
       const alreadyExists = existingFacts.some((f) => f.key === fact.key && f.value === fact.value)
       if (!alreadyExists) {

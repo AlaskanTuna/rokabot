@@ -25,7 +25,7 @@ memory:
   bufferSize: 20
   extractionInterval: 10
   extractionGapMs: 10000
-  maxFactsPerUser: 10
+  maxFactsPerUser: 20
   factRetentionDays: 90
   channelMonitorTtlMs: 86400000
 
