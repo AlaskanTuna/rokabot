@@ -257,7 +257,7 @@ flowchart TD
 | Cap                | 10 facts per user, oldest evicted on overflow                          |
 | Passive monitoring | 20-message ring buffer in monitored channels (in-memory only)          |
 | Extraction trigger | Every 20 messages, background Gemini call (~1 extra RPM per 20 msgs)   |
-| Channel monitoring | Auto-activated on @mention, expires after 24h of no interaction        |
+| Channel monitoring | Auto-activated on @mention, 24h TTL refreshed on each new @mention     |
 | Fact retention     | 90-day TTL with refresh-on-access; daily pruning job                   |
 | Deduplication      | Skips saving if identical key+value already exists                     |
 
