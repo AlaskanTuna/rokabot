@@ -49,7 +49,10 @@ export function startReminderScheduler(client: Client): void {
             `Hey~ you asked me to remind you: "${reminder.reminder}" \u266a\n\n-# (Sent as DM because I couldn't reach the original channel)`
           )
           markDelivered(reminder.id)
-          logger.info({ reminderId: reminder.id, userId: reminder.userId }, 'Reminder delivered via DM (channel fallback)')
+          logger.info(
+            { reminderId: reminder.id, userId: reminder.userId },
+            'Reminder delivered via DM (channel fallback)'
+          )
         } catch (dmError) {
           markDelivered(reminder.id)
           logger.warn({ reminderId: reminder.id }, 'Both channel and DM delivery failed, marking delivered')

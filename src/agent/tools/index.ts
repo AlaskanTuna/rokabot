@@ -14,7 +14,7 @@ import { getWeather } from './getWeather.js'
 import { searchWeb } from './searchWeb.js'
 import { rememberUser } from './rememberUser.js'
 import { recallUser } from './recallUser.js'
-import { setReminder } from './setReminder.js'
+import { setReminder, listReminders, cancelReminder } from './setReminder.js'
 
 export { rollDice, flipCoin, getCurrentTime, searchAnime, getAnimeSchedule, getWeather, searchWeb }
 export { rememberUser, recallUser }
@@ -171,6 +171,30 @@ export const setReminderTool = new FunctionTool({
   }
 })
 
+export const listRemindersTool = new FunctionTool({
+  name: 'list_reminders',
+  description:
+    "List the current user's active reminders. Use when someone asks to see their reminders, check what's pending, or asks 'what reminders do I have'. The user ID is filled in automatically.",
+  parameters: z.object({}),
+  execute: async (_input, toolContext) => {
+    const userId = toolContext?.state?.get<string>('_userId') ?? 'unknown'
+    return listReminders({ user_id: userId })
+  }
+})
+
+export const cancelReminderTool = new FunctionTool({
+  name: 'cancel_reminder',
+  description:
+    'Cancel an active reminder by its ID. Use when someone asks to cancel, remove, or delete a reminder. Call list_reminders first if you need to find the ID. The user ID is filled in automatically.',
+  parameters: z.object({
+    reminder_id: z.number().describe('The reminder ID to cancel (get this from list_reminders)')
+  }),
+  execute: async (input, toolContext) => {
+    const userId = toolContext?.state?.get<string>('_userId') ?? 'unknown'
+    return cancelReminder({ user_id: userId, reminder_id: input.reminder_id })
+  }
+})
+
 /** All tool instances registered with the Roka LlmAgent. */
 export const rokaTools = [
   rollDiceTool,
@@ -182,5 +206,7 @@ export const rokaTools = [
   searchWebTool,
   rememberUserTool,
   recallUserTool,
-  setReminderTool
+  setReminderTool,
+  listRemindersTool,
+  cancelReminderTool
 ]
