@@ -454,7 +454,10 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
 
       // Check if this is a transient API error worth retrying
       const errorMsg = error instanceof Error ? error.message : String(error)
-      const isTransient = /429|500|503|RESOURCE_EXHAUSTED|overloaded|quota|rate.limit|unavailable/i.test(errorMsg)
+      const isTransient =
+        /429|500|503|RESOURCE_EXHAUSTED|overloaded|quota|rate.limit|unavailable|EAI_AGAIN|ECONNRESET|ETIMEDOUT|fetch failed/i.test(
+          errorMsg
+        )
 
       if (isTransient && attempt < MAX_RETRIES) {
         const delayMs = BASE_DELAY_MS * Math.pow(2, attempt)
