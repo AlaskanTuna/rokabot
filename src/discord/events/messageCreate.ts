@@ -10,7 +10,7 @@ import { shouldReact } from '../emojiReactor.js'
 import { handleGachaMention } from './gachaMention.js'
 import { markActive, isMonitored } from '../../agent/channelMonitor.js'
 import { addMessage as addToPassiveBuffer } from '../../agent/passiveBuffer.js'
-import { maybeExtractFromBuffer } from '../../agent/memoryExtractor.js'
+import { maybeExtractFromBuffer, EXTRACTION_INTERVAL } from '../../agent/memoryExtractor.js'
 
 // Discord Components V2 type discriminants
 const TEXT_DISPLAY = 10
@@ -90,7 +90,7 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
           message.member?.displayName ?? message.author.displayName,
           msgContent
         )
-        if (count >= 20) {
+        if (count >= EXTRACTION_INTERVAL) {
           maybeExtractFromBuffer(message.channelId)
         }
       }

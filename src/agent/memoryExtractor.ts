@@ -1,7 +1,7 @@
 /**
  * Background memory extraction — passively extracts user facts from conversations.
- * When the passive buffer reaches 20 messages in a monitored channel, snapshots the
- * buffer and fires a background Gemini call to extract personal facts for all users.
+ * When the passive buffer reaches the configured threshold in a monitored channel,
+ * snapshots the buffer and fires a background Gemini call to extract personal facts.
  * Non-blocking: runs as a detached promise, never interrupts the live conversation.
  */
 
@@ -11,7 +11,7 @@ import { logger } from '../utils/logger.js'
 import { saveFact, getFacts } from '../storage/userMemory.js'
 import { getMessages, clearBuffer, type BufferedMessage } from './passiveBuffer.js'
 
-const EXTRACTION_INTERVAL = 20
+const EXTRACTION_INTERVAL = config.session.windowSize * 2
 const MIN_RPM_HEADROOM = 3
 
 // Simple self-rate-limit: track last extraction time
@@ -56,7 +56,7 @@ interface ExtractedFact {
  */
 export function maybeExtractFromBuffer(channelId: string): void {
   const messages = getMessages(channelId)
-  if (messages.length < 10) return // Not enough context
+  if (messages.length < config.session.windowSize) return // Not enough context
 
   // Self-rate-limit
   const now = Date.now()

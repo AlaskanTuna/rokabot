@@ -66,7 +66,7 @@ describe('config module', () => {
     expect(config.logging.level).toBe('info')
     expect(config.rateLimit.rpm).toBe(15)
     expect(config.rateLimit.rpd).toBe(500)
-    expect(config.session.ttlMs).toBe(300_000)
+    expect(config.session.ttlMs).toBe(500_000)
     expect(config.session.windowSize).toBe(10)
     expect(config.discord.maxMessageLength).toBe(1500)
   })
