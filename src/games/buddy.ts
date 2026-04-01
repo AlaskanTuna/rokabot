@@ -285,11 +285,51 @@ export function hasHatchedToday(userId: string): boolean {
   return row?.last_draw_date === today
 }
 
-/** Mark that the user has hatched today (reuses gacha_daily table). */
+/** Get yesterday's date string in configured timezone. */
+function getYesterdayDate(): string {
+  const tz = config.timezone ?? undefined
+  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
+  try {
+    return yesterday.toLocaleDateString('en-CA', { timeZone: tz })
+  } catch {
+    return yesterday.toISOString().slice(0, 10)
+  }
+}
+
+/** Mark that the user has hatched today and update their streak. */
 export function markDailyHatch(userId: string): void {
   const db = getDb()
   const today = getTodayDate()
-  db.prepare('INSERT OR REPLACE INTO gacha_daily (user_id, last_draw_date) VALUES (?, ?)').run(userId, today)
+  const yesterday = getYesterdayDate()
+
+  const row = db.prepare('SELECT last_draw_date, streak FROM gacha_daily WHERE user_id = ?').get(userId) as
+    | { last_draw_date: string; streak: number }
+    | undefined
+
+  // Continue streak if last hatch was yesterday, otherwise reset to 1
+  const newStreak = row?.last_draw_date === yesterday ? (row.streak ?? 0) + 1 : 1
+
+  db.prepare('INSERT OR REPLACE INTO gacha_daily (user_id, last_draw_date, streak) VALUES (?, ?, ?)').run(
+    userId,
+    today,
+    newStreak
+  )
+}
+
+/** Get the current hatch streak for a user. */
+export function getStreak(userId: string): number {
+  const db = getDb()
+  const today = getTodayDate()
+  const yesterday = getYesterdayDate()
+
+  const row = db.prepare('SELECT last_draw_date, streak FROM gacha_daily WHERE user_id = ?').get(userId) as
+    | { last_draw_date: string; streak: number }
+    | undefined
+
+  if (!row) return 0
+  // Streak is valid if last hatch was today or yesterday
+  if (row.last_draw_date === today || row.last_draw_date === yesterday) return row.streak ?? 0
+  return 0 // Streak broken
 }
 
 /** Update a buddy's name and personality (updates the latest buddy). */

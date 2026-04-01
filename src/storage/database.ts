@@ -74,6 +74,7 @@ function createTables(database: Database.Database): void {
     CREATE TABLE IF NOT EXISTS gacha_daily (
       user_id TEXT NOT NULL,
       last_draw_date TEXT NOT NULL,
+      streak INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (user_id)
     );
 

@@ -21,6 +21,7 @@ import {
   getBuddyCollection,
   hasHatchedToday,
   markDailyHatch,
+  getStreak,
   getTopBuddies,
   getSpeciesInfo,
   type BuddyData
@@ -224,7 +225,9 @@ function handleHatch(interaction: ChatInputCommandInteraction) {
     body.push(`${display}  ${statBar(val)}  **${val}**/10`)
   }
 
-  body.push('', `You now have **${count}** companion spirit${count !== 1 ? 's' : ''}~`)
+  const streak = getStreak(userId)
+  const streakText = streak > 1 ? ` | \uD83D\uDD25 **${streak}-day streak!**` : ''
+  body.push('', `You now have **${count}** companion spirit${count !== 1 ? 's' : ''}~${streakText}`)
 
   return buildBuddyContainer({
     accentColor: RARITY_COLORS[buddy.rarity],
@@ -360,8 +363,11 @@ function handleBuddyStats(interaction: ChatInputCommandInteraction) {
     .map(([rarity, count]) => `${RARITY_EMOJI[rarity]} ${rarity}: ${count}`)
     .join(' | ')
 
+  const streak = getStreak(userId)
+  const streakLine = streak > 0 ? ` | \uD83D\uDD25 ${streak}-day streak` : ''
+
   const lines = [
-    `**Collection:** ${collection.length} companion${collection.length !== 1 ? 's' : ''}`,
+    `**Collection:** ${collection.length} companion${collection.length !== 1 ? 's' : ''}${streakLine}`,
     rarityBreakdown,
     '',
     `**Latest:** ${info?.emoji ?? ''} **${buddy.name}** ${rarityEmoji} ${buddy.rarity.toUpperCase()}`,

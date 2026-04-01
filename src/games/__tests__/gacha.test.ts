@@ -51,6 +51,7 @@ function createTestDb(): Database.Database {
     CREATE TABLE IF NOT EXISTS gacha_daily (
       user_id TEXT NOT NULL,
       last_draw_date TEXT NOT NULL,
+      streak INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (user_id)
     );
   `)
@@ -324,8 +325,8 @@ describe('buddy pet system', () => {
     it('returns false if last hatch was a different day', () => {
       // Manually insert a past date
       testDb
-        .prepare('INSERT OR REPLACE INTO gacha_daily (user_id, last_draw_date) VALUES (?, ?)')
-        .run('old-user', '2020-01-01')
+        .prepare('INSERT OR REPLACE INTO gacha_daily (user_id, last_draw_date, streak) VALUES (?, ?, ?)')
+        .run('old-user', '2020-01-01', 1)
       expect(hasHatchedToday('old-user')).toBe(false)
     })
   })
