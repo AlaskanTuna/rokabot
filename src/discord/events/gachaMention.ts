@@ -13,7 +13,7 @@ import {
 } from '@discordjs/builders'
 import { MessageFlags } from 'discord.js'
 import { logger } from '../../utils/logger.js'
-import { getBuddy, getSpeciesInfo } from '../../games/buddy.js'
+import { getBuddy, getBuddyCount, getSpeciesInfo } from '../../games/buddy.js'
 import {
   RARITY_COLORS,
   RARITY_EMOJI,
@@ -80,7 +80,9 @@ export async function handleGachaMention(message: Message): Promise<boolean> {
       .addSectionComponents(section)
       .addSeparatorComponents(new SeparatorBuilder())
       .addTextDisplayComponents(
-        new TextDisplayBuilder().setContent(`-# Hatched on ${new Date(buddy.hatchedAt).toLocaleDateString('en-GB')}`)
+        new TextDisplayBuilder().setContent(
+          `-# Companion 1 of ${getBuddyCount(userId)} | Hatched on ${new Date(buddy.hatchedAt).toLocaleDateString('en-GB')}`
+        )
       )
 
     await message.reply({

@@ -14,14 +14,27 @@ vi.mock('../../storage/database.js', () => ({
   getDb: () => testDb
 }))
 
-import { mulberry32, hashString, generateBuddy, saveBuddy, getBuddy, getTopBuddies } from '../buddy.js'
+import {
+  mulberry32,
+  hashString,
+  generateBuddy,
+  saveBuddy,
+  getBuddy,
+  getBuddyCollection,
+  getBuddyCount,
+  hasHatchedToday,
+  markDailyHatch,
+  getTopBuddies,
+  getTodayDate
+} from '../buddy.js'
 import { SPECIES, STAT_NAMES, RARITY_STAT_RANGE, type BuddyRarity } from '../data/buddySpecies.js'
 
 function createTestDb(): Database.Database {
   const db = new Database(':memory:')
   db.exec(`
     CREATE TABLE IF NOT EXISTS buddy (
-      user_id TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
       species TEXT NOT NULL,
       rarity TEXT NOT NULL,
       shiny INTEGER NOT NULL DEFAULT 0,
@@ -31,6 +44,14 @@ function createTestDb(): Database.Database {
       personality TEXT,
       stats_json TEXT NOT NULL,
       hatched_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_buddy_user ON buddy (user_id, hatched_at);
+
+    CREATE TABLE IF NOT EXISTS gacha_daily (
+      user_id TEXT NOT NULL,
+      last_draw_date TEXT NOT NULL,
+      PRIMARY KEY (user_id)
     );
   `)
   return db
@@ -87,8 +108,8 @@ describe('buddy pet system', () => {
   })
 
   describe('generateBuddy', () => {
-    it('returns a valid buddy for a given userId', () => {
-      const buddy = generateBuddy('user-123')
+    it('returns a valid buddy for a given userId and dateSeed', () => {
+      const buddy = generateBuddy('user-123', '2026-04-01')
 
       expect(buddy.userId).toBe('user-123')
       expect(buddy.species).toBeTruthy()
@@ -102,9 +123,9 @@ describe('buddy pet system', () => {
       expect(buddy.hatchedAt).toBeGreaterThan(0)
     })
 
-    it('generates the same buddy for the same userId', () => {
-      const buddy1 = generateBuddy('deterministic-user')
-      const buddy2 = generateBuddy('deterministic-user')
+    it('generates the same buddy for the same userId and dateSeed', () => {
+      const buddy1 = generateBuddy('deterministic-user', '2026-04-01')
+      const buddy2 = generateBuddy('deterministic-user', '2026-04-01')
 
       expect(buddy1.species).toBe(buddy2.species)
       expect(buddy1.rarity).toBe(buddy2.rarity)
@@ -115,9 +136,9 @@ describe('buddy pet system', () => {
       expect(buddy1.stats).toEqual(buddy2.stats)
     })
 
-    it('generates different buddies for different userIds', () => {
-      const buddy1 = generateBuddy('user-aaa')
-      const buddy2 = generateBuddy('user-zzz')
+    it('generates different buddies for different dateSeed values', () => {
+      const buddy1 = generateBuddy('user-aaa', '2026-04-01')
+      const buddy2 = generateBuddy('user-aaa', '2026-04-02')
 
       // At least one attribute should differ (statistically near-certain)
       const same =
@@ -129,10 +150,22 @@ describe('buddy pet system', () => {
       expect(same).toBe(false)
     })
 
+    it('generates different buddies for different userIds on the same day', () => {
+      const buddy1 = generateBuddy('user-aaa', '2026-04-01')
+      const buddy2 = generateBuddy('user-zzz', '2026-04-01')
+
+      const same =
+        buddy1.species === buddy2.species &&
+        buddy1.rarity === buddy2.rarity &&
+        buddy1.eyes === buddy2.eyes &&
+        buddy1.hat === buddy2.hat &&
+        buddy1.name === buddy2.name
+      expect(same).toBe(false)
+    })
+
     it('assigns a species that matches the rolled rarity', () => {
-      // Test with many users to cover different rarities
       for (let i = 0; i < 50; i++) {
-        const buddy = generateBuddy(`rarity-check-${i}`)
+        const buddy = generateBuddy(`rarity-check-${i}`, '2026-04-01')
         const speciesInfo = SPECIES.find((s) => s.id === buddy.species)
         expect(speciesInfo).toBeDefined()
         expect(speciesInfo!.rarity).toBe(buddy.rarity)
@@ -141,7 +174,7 @@ describe('buddy pet system', () => {
 
     it('generates stats within rarity floor/ceiling bounds', () => {
       for (let i = 0; i < 50; i++) {
-        const buddy = generateBuddy(`stat-check-${i}`)
+        const buddy = generateBuddy(`stat-check-${i}`, '2026-04-01')
         const range = RARITY_STAT_RANGE[buddy.rarity]
         for (const { key } of STAT_NAMES) {
           const val = buddy.stats[key]
@@ -152,7 +185,7 @@ describe('buddy pet system', () => {
     })
 
     it('produces all 5 stats', () => {
-      const buddy = generateBuddy('stat-keys')
+      const buddy = generateBuddy('stat-keys', '2026-04-01')
       const expectedKeys = ['charm', 'wit', 'dere', 'drama', 'luck']
       for (const key of expectedKeys) {
         expect(buddy.stats[key]).toBeDefined()
@@ -166,7 +199,7 @@ describe('buddy pet system', () => {
       let shinyCount = 0
       const total = 10000
       for (let i = 0; i < total; i++) {
-        const buddy = generateBuddy(`shiny-test-${i}`)
+        const buddy = generateBuddy(`shiny-test-${i}`, '2026-04-01')
         if (buddy.shiny) shinyCount++
       }
       // Expect between 0.2% and 3% (generous bounds for randomness)
@@ -178,7 +211,7 @@ describe('buddy pet system', () => {
 
   describe('saveBuddy / getBuddy', () => {
     it('round-trips a buddy correctly', () => {
-      const buddy = generateBuddy('roundtrip-user')
+      const buddy = generateBuddy('roundtrip-user', '2026-04-01')
       saveBuddy(buddy)
 
       const loaded = getBuddy('roundtrip-user')
@@ -200,15 +233,107 @@ describe('buddy pet system', () => {
       expect(loaded).toBeNull()
     })
 
-    it('overwrites on re-save', () => {
-      const buddy = generateBuddy('overwrite-user')
-      saveBuddy(buddy)
+    it('returns the latest buddy when multiple exist', () => {
+      const buddy1 = generateBuddy('multi-user', '2026-04-01')
+      buddy1.hatchedAt = 1000
+      saveBuddy(buddy1)
 
-      const modified = { ...buddy, name: 'NewName' }
-      saveBuddy(modified)
+      const buddy2 = generateBuddy('multi-user', '2026-04-02')
+      buddy2.hatchedAt = 2000
+      saveBuddy(buddy2)
 
-      const loaded = getBuddy('overwrite-user')
-      expect(loaded!.name).toBe('NewName')
+      const loaded = getBuddy('multi-user')
+      expect(loaded).not.toBeNull()
+      expect(loaded!.hatchedAt).toBe(2000)
+    })
+
+    it('saveBuddy returns the inserted row id', () => {
+      const buddy = generateBuddy('id-test', '2026-04-01')
+      const id = saveBuddy(buddy)
+      expect(id).toBeGreaterThan(0)
+
+      const buddy2 = generateBuddy('id-test', '2026-04-02')
+      const id2 = saveBuddy(buddy2)
+      expect(id2).toBeGreaterThan(id)
+    })
+  })
+
+  describe('getBuddyCollection', () => {
+    it('returns empty array when no buddies exist', () => {
+      const collection = getBuddyCollection('nobody')
+      expect(collection).toEqual([])
+    })
+
+    it('returns all buddies for a user, most recent first', () => {
+      const buddy1 = generateBuddy('collector', '2026-04-01')
+      buddy1.hatchedAt = 1000
+      saveBuddy(buddy1)
+
+      const buddy2 = generateBuddy('collector', '2026-04-02')
+      buddy2.hatchedAt = 2000
+      saveBuddy(buddy2)
+
+      const buddy3 = generateBuddy('collector', '2026-04-03')
+      buddy3.hatchedAt = 3000
+      saveBuddy(buddy3)
+
+      const collection = getBuddyCollection('collector')
+      expect(collection).toHaveLength(3)
+      expect(collection[0].hatchedAt).toBe(3000)
+      expect(collection[1].hatchedAt).toBe(2000)
+      expect(collection[2].hatchedAt).toBe(1000)
+    })
+
+    it('does not return other users buddies', () => {
+      const buddyA = generateBuddy('user-a', '2026-04-01')
+      saveBuddy(buddyA)
+
+      const buddyB = generateBuddy('user-b', '2026-04-01')
+      saveBuddy(buddyB)
+
+      const collectionA = getBuddyCollection('user-a')
+      expect(collectionA).toHaveLength(1)
+      expect(collectionA[0].userId).toBe('user-a')
+    })
+  })
+
+  describe('getBuddyCount', () => {
+    it('returns 0 when no buddies exist', () => {
+      expect(getBuddyCount('nobody')).toBe(0)
+    })
+
+    it('returns correct count for multiple buddies', () => {
+      for (let i = 0; i < 5; i++) {
+        const buddy = generateBuddy('counter', `2026-04-0${i + 1}`)
+        saveBuddy(buddy)
+      }
+      expect(getBuddyCount('counter')).toBe(5)
+    })
+  })
+
+  describe('hasHatchedToday / markDailyHatch', () => {
+    it('returns false when user has not hatched', () => {
+      expect(hasHatchedToday('fresh-user')).toBe(false)
+    })
+
+    it('returns true after marking daily hatch', () => {
+      markDailyHatch('daily-user')
+      expect(hasHatchedToday('daily-user')).toBe(true)
+    })
+
+    it('returns false if last hatch was a different day', () => {
+      // Manually insert a past date
+      testDb
+        .prepare('INSERT OR REPLACE INTO gacha_daily (user_id, last_draw_date) VALUES (?, ?)')
+        .run('old-user', '2020-01-01')
+      expect(hasHatchedToday('old-user')).toBe(false)
+    })
+  })
+
+  describe('getTodayDate', () => {
+    it('returns a string in YYYY-MM-DD format', () => {
+      const date = getTodayDate()
+      expect(date).toMatch(/^\d{4}-\d{2}-\d{2}$/)
     })
   })
 
@@ -218,25 +343,33 @@ describe('buddy pet system', () => {
       expect(top).toEqual([])
     })
 
-    it('returns buddies sorted by total stats descending', () => {
-      // Create buddies with known stats
-      const buddy1 = generateBuddy('leader-1')
-      buddy1.stats = { charm: 10, wit: 10, dere: 10, drama: 10, luck: 10 }
-      saveBuddy(buddy1)
+    it('returns best buddy per user sorted by total stats descending', () => {
+      // User 1: two buddies, one with high stats
+      const buddy1a = generateBuddy('leader-1', '2026-04-01')
+      buddy1a.stats = { charm: 10, wit: 10, dere: 10, drama: 10, luck: 10 }
+      saveBuddy(buddy1a)
 
-      const buddy2 = generateBuddy('leader-2')
-      buddy2.stats = { charm: 1, wit: 1, dere: 1, drama: 1, luck: 1 }
+      const buddy1b = generateBuddy('leader-1', '2026-04-02')
+      buddy1b.stats = { charm: 1, wit: 1, dere: 1, drama: 1, luck: 1 }
+      saveBuddy(buddy1b)
+
+      // User 2: one buddy with low stats
+      const buddy2 = generateBuddy('leader-2', '2026-04-01')
+      buddy2.stats = { charm: 3, wit: 3, dere: 3, drama: 3, luck: 3 }
       saveBuddy(buddy2)
 
       const top = getTopBuddies(10)
       expect(top).toHaveLength(2)
+      // User 1's best buddy (50 total) should be first
       expect(top[0].userId).toBe('leader-1')
+      const topTotal = Object.values(top[0].stats).reduce((s, v) => s + v, 0)
+      expect(topTotal).toBe(50)
       expect(top[1].userId).toBe('leader-2')
     })
 
     it('respects the limit parameter', () => {
       for (let i = 0; i < 5; i++) {
-        const buddy = generateBuddy(`limit-test-${i}`)
+        const buddy = generateBuddy(`limit-test-${i}`, '2026-04-01')
         saveBuddy(buddy)
       }
       const top = getTopBuddies(3)

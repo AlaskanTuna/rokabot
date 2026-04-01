@@ -78,7 +78,8 @@ function createTables(database: Database.Database): void {
     );
 
     CREATE TABLE IF NOT EXISTS buddy (
-      user_id TEXT PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
       species TEXT NOT NULL,
       rarity TEXT NOT NULL,
       shiny INTEGER NOT NULL DEFAULT 0,
@@ -89,6 +90,8 @@ function createTables(database: Database.Database): void {
       stats_json TEXT NOT NULL,
       hatched_at INTEGER NOT NULL
     );
+
+    CREATE INDEX IF NOT EXISTS idx_buddy_user ON buddy (user_id, hatched_at);
   `)
 }
 

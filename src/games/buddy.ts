@@ -1,10 +1,12 @@
 /**
- * Buddy pet system — deterministic companion generation from userId.
- * Each user gets exactly one buddy, determined by a Mulberry32 PRNG seeded from their userId hash.
+ * Buddy pet system — daily hatchable companion collection.
+ * Each user can hatch one buddy per day, building a collection over time.
+ * Generation is deterministic from userId + date seed via Mulberry32 PRNG.
  * Buddies are persistent via SQLite.
  */
 
 import { getDb } from '../storage/database.js'
+import { config } from '../config.js'
 import {
   SPECIES,
   RARITY_WEIGHTS,
@@ -37,6 +39,18 @@ export function hashString(str: string): number {
     hash = ((hash << 5) - hash + ch) | 0
   }
   return hash
+}
+
+// ── Date helper ──
+
+/** Get today's date string in YYYY-MM-DD format, respecting configured timezone. */
+export function getTodayDate(): string {
+  const tz = config.timezone ?? undefined
+  try {
+    return new Date().toLocaleDateString('en-CA', { timeZone: tz })
+  } catch {
+    return new Date().toISOString().slice(0, 10)
+  }
 }
 
 // ── Data model ──
@@ -139,9 +153,10 @@ function rollRarity(rng: () => number): BuddyRarity {
   return 'common'
 }
 
-/** Generate a fully deterministic buddy from a userId. */
-export function generateBuddy(userId: string): BuddyData {
-  const rng = mulberry32(hashString(userId))
+/** Generate a fully deterministic buddy from a userId and date seed. */
+export function generateBuddy(userId: string, dateSeed?: string): BuddyData {
+  const dateStr = dateSeed ?? getTodayDate()
+  const rng = mulberry32(hashString(userId + ':' + dateStr))
 
   const rarity = rollRarity(rng)
 
@@ -184,6 +199,7 @@ export function generateBuddy(userId: string): BuddyData {
 // ── SQLite persistence ──
 
 interface BuddyRow {
+  id: number
   user_id: string
   species: string
   rarity: string
@@ -196,31 +212,8 @@ interface BuddyRow {
   hatched_at: number
 }
 
-/** Save a buddy to SQLite. */
-export function saveBuddy(buddy: BuddyData): void {
-  const db = getDb()
-  db.prepare(
-    `INSERT OR REPLACE INTO buddy (user_id, species, rarity, shiny, eyes, hat, name, personality, stats_json, hatched_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(
-    buddy.userId,
-    buddy.species,
-    buddy.rarity,
-    buddy.shiny ? 1 : 0,
-    buddy.eyes,
-    buddy.hat,
-    buddy.name,
-    buddy.personality,
-    JSON.stringify(buddy.stats),
-    buddy.hatchedAt
-  )
-}
-
-/** Load a buddy from SQLite, or null if not found. */
-export function getBuddy(userId: string): BuddyData | null {
-  const db = getDb()
-  const row = db.prepare('SELECT * FROM buddy WHERE user_id = ?').get(userId) as BuddyRow | undefined
-  if (!row) return null
+/** Convert a database row to a BuddyData object. */
+function rowToBuddy(row: BuddyRow): BuddyData {
   return {
     userId: row.user_id,
     species: row.species,
@@ -235,29 +228,102 @@ export function getBuddy(userId: string): BuddyData | null {
   }
 }
 
-/** Update a buddy's name and personality. */
-export function updateBuddyName(userId: string, name: string, personality: string): void {
+/** Save a buddy to SQLite. Returns the inserted row id. */
+export function saveBuddy(buddy: BuddyData): number {
   const db = getDb()
-  db.prepare('UPDATE buddy SET name = ?, personality = ? WHERE user_id = ?').run(name, personality, userId)
+  const result = db
+    .prepare(
+      `INSERT INTO buddy (user_id, species, rarity, shiny, eyes, hat, name, personality, stats_json, hatched_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      buddy.userId,
+      buddy.species,
+      buddy.rarity,
+      buddy.shiny ? 1 : 0,
+      buddy.eyes,
+      buddy.hat,
+      buddy.name,
+      buddy.personality,
+      JSON.stringify(buddy.stats),
+      buddy.hatchedAt
+    )
+  return Number(result.lastInsertRowid)
 }
 
-/** Get the top buddies by total stat sum, for leaderboard. */
+/** Load the latest (most recent) buddy for a user, or null if none. */
+export function getBuddy(userId: string): BuddyData | null {
+  const db = getDb()
+  const row = db.prepare('SELECT * FROM buddy WHERE user_id = ? ORDER BY hatched_at DESC LIMIT 1').get(userId) as
+    | BuddyRow
+    | undefined
+  if (!row) return null
+  return rowToBuddy(row)
+}
+
+/** Get all buddies for a user, most recent first. */
+export function getBuddyCollection(userId: string): BuddyData[] {
+  const db = getDb()
+  const rows = db.prepare('SELECT * FROM buddy WHERE user_id = ? ORDER BY hatched_at DESC').all(userId) as BuddyRow[]
+  return rows.map(rowToBuddy)
+}
+
+/** Count total buddies for a user. */
+export function getBuddyCount(userId: string): number {
+  const db = getDb()
+  const row = db.prepare('SELECT COUNT(*) as cnt FROM buddy WHERE user_id = ?').get(userId) as { cnt: number }
+  return row.cnt
+}
+
+/** Check whether the user has already hatched a buddy today (reuses gacha_daily table). */
+export function hasHatchedToday(userId: string): boolean {
+  const db = getDb()
+  const today = getTodayDate()
+  const row = db.prepare('SELECT last_draw_date FROM gacha_daily WHERE user_id = ?').get(userId) as
+    | { last_draw_date: string }
+    | undefined
+  return row?.last_draw_date === today
+}
+
+/** Mark that the user has hatched today (reuses gacha_daily table). */
+export function markDailyHatch(userId: string): void {
+  const db = getDb()
+  const today = getTodayDate()
+  db.prepare('INSERT OR REPLACE INTO gacha_daily (user_id, last_draw_date) VALUES (?, ?)').run(userId, today)
+}
+
+/** Update a buddy's name and personality (updates the latest buddy). */
+export function updateBuddyName(userId: string, name: string, personality: string): void {
+  const db = getDb()
+  db.prepare(
+    `UPDATE buddy SET name = ?, personality = ? WHERE id = (
+      SELECT id FROM buddy WHERE user_id = ? ORDER BY hatched_at DESC LIMIT 1
+    )`
+  ).run(name, personality, userId)
+}
+
+/** Get the top buddies by total stat sum, for leaderboard. Ranks by best single buddy per user. */
 export function getTopBuddies(limit: number = 10): BuddyData[] {
   const db = getDb()
   const rows = db.prepare('SELECT * FROM buddy ORDER BY hatched_at ASC').all() as BuddyRow[]
 
-  const buddies: BuddyData[] = rows.map((row) => ({
-    userId: row.user_id,
-    species: row.species,
-    rarity: row.rarity as BuddyRarity,
-    shiny: row.shiny === 1,
-    eyes: row.eyes,
-    hat: row.hat,
-    name: row.name,
-    personality: row.personality,
-    stats: JSON.parse(row.stats_json),
-    hatchedAt: row.hatched_at
-  }))
+  // Group by user, keep only the best buddy per user (highest total stats)
+  const bestByUser = new Map<string, BuddyData>()
+  for (const row of rows) {
+    const buddy = rowToBuddy(row)
+    const totalStats = Object.values(buddy.stats).reduce((s, v) => s + v, 0)
+    const existing = bestByUser.get(buddy.userId)
+    if (!existing) {
+      bestByUser.set(buddy.userId, buddy)
+    } else {
+      const existingTotal = Object.values(existing.stats).reduce((s, v) => s + v, 0)
+      if (totalStats > existingTotal) {
+        bestByUser.set(buddy.userId, buddy)
+      }
+    }
+  }
+
+  const buddies = Array.from(bestByUser.values())
 
   // Sort by total stat sum descending
   buddies.sort((a, b) => {

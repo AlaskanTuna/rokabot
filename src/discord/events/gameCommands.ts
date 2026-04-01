@@ -13,7 +13,18 @@ import {
   ThumbnailBuilder
 } from '@discordjs/builders'
 import { logger } from '../../utils/logger.js'
-import { generateBuddy, saveBuddy, getBuddy, getTopBuddies, getSpeciesInfo, type BuddyData } from '../../games/buddy.js'
+import {
+  generateBuddy,
+  saveBuddy,
+  getBuddy,
+  getBuddyCount,
+  getBuddyCollection,
+  hasHatchedToday,
+  markDailyHatch,
+  getTopBuddies,
+  getSpeciesInfo,
+  type BuddyData
+} from '../../games/buddy.js'
 import {
   SPECIES,
   RARITY_COLORS,
@@ -179,21 +190,23 @@ function formatBuddySummary(buddy: BuddyData): string {
 
 function handleHatch(interaction: ChatInputCommandInteraction) {
   const userId = interaction.user.id
-  const existing = getBuddy(userId)
 
-  if (existing) {
-    const info = getSpeciesInfo(existing.species)
+  if (hasHatchedToday(userId)) {
+    const latest = getBuddy(userId)
+    const info = latest ? getSpeciesInfo(latest.species) : undefined
     return buildBuddyContainer({
-      accentColor: RARITY_COLORS[existing.rarity],
-      title: 'Already Hatched!',
-      body: `You already have **${existing.name}** the ${info?.name ?? existing.species}~ Use \`/gacha view\` to see them!`,
-      thumbnailUrl: buddyThumbnailUrl(existing.species, existing.rarity)
+      accentColor: latest ? RARITY_COLORS[latest.rarity] : 0xb0c4de,
+      title: 'Already Hatched Today!',
+      body: `You already hatched **${latest?.name ?? 'a companion'}** the ${info?.name ?? 'spirit'} today~ Come back tomorrow!`,
+      thumbnailUrl: latest ? buddyThumbnailUrl(latest.species, latest.rarity) : undefined
     })
   }
 
   const buddy = generateBuddy(userId)
   saveBuddy(buddy)
+  markDailyHatch(userId)
 
+  const count = getBuddyCount(userId)
   const info = getSpeciesInfo(buddy.species)
   const rarityEmoji = RARITY_EMOJI[buddy.rarity]
   const shinyTag = buddy.shiny ? '\n\u2728 **SHINY VARIANT!** \u2728' : ''
@@ -211,7 +224,7 @@ function handleHatch(interaction: ChatInputCommandInteraction) {
     body.push(`${display}  ${statBar(val)}  **${val}**/10`)
   }
 
-  body.push('', `Use \`/gacha view\` to see your companion anytime~`)
+  body.push('', `You now have **${count}** companion spirit${count !== 1 ? 's' : ''}~`)
 
   return buildBuddyContainer({
     accentColor: RARITY_COLORS[buddy.rarity],
@@ -233,12 +246,15 @@ function handleBuddyView(interaction: ChatInputCommandInteraction) {
     })
   }
 
+  const count = getBuddyCount(userId)
+  const footerParts = [`Companion 1 of ${count}`, `Hatched on ${new Date(buddy.hatchedAt).toLocaleDateString('en-GB')}`]
+
   return buildBuddyContainer({
     accentColor: RARITY_COLORS[buddy.rarity],
     title: `${buddy.name ?? 'Your Companion'}`,
     body: formatBuddySummary(buddy),
     thumbnailUrl: buddyThumbnailUrl(buddy.species, buddy.rarity),
-    footer: `Hatched on ${new Date(buddy.hatchedAt).toLocaleDateString('en-GB')}`
+    footer: footerParts.join(' | ')
   })
 }
 
@@ -329,13 +345,26 @@ function handleBuddyStats(interaction: ChatInputCommandInteraction) {
     })
   }
 
+  const collection = getBuddyCollection(userId)
   const info = getSpeciesInfo(buddy.species)
   const rarityEmoji = RARITY_EMOJI[buddy.rarity]
   const range = RARITY_STAT_RANGE[buddy.rarity]
   const totalStats = Object.values(buddy.stats).reduce((s, v) => s + v, 0)
 
+  // Collection overview
+  const rarityCounts: Record<BuddyRarity, number> = { common: 0, uncommon: 0, rare: 0, epic: 0, legendary: 0 }
+  for (const b of collection) rarityCounts[b.rarity]++
+
+  const rarityBreakdown = (Object.entries(rarityCounts) as [BuddyRarity, number][])
+    .filter(([, count]) => count > 0)
+    .map(([rarity, count]) => `${RARITY_EMOJI[rarity]} ${rarity}: ${count}`)
+    .join(' | ')
+
   const lines = [
-    `${info?.emoji ?? ''} **${buddy.name}** ${rarityEmoji} ${buddy.rarity.toUpperCase()}`,
+    `**Collection:** ${collection.length} companion${collection.length !== 1 ? 's' : ''}`,
+    rarityBreakdown,
+    '',
+    `**Latest:** ${info?.emoji ?? ''} **${buddy.name}** ${rarityEmoji} ${buddy.rarity.toUpperCase()}`,
     '',
     '**Detailed Stats:**',
     ''
@@ -382,13 +411,13 @@ function handleBuddyGuide() {
     accentColor: 0xb0c4de,
     title: 'Companion Spirit Guide',
     body: [
-      'Every user gets a unique companion spirit, determined by your soul (user ID). Your companion is yours forever~',
+      'Hatch a new companion spirit every day and build your collection~ Each day brings a different companion!',
       '',
       '**Commands:**',
-      '\u2022 `/gacha hatch` \u2014 Hatch your companion for the first time',
-      '\u2022 `/gacha view` \u2014 View your companion',
-      '\u2022 `/gacha pet` \u2014 Interact with your companion',
-      '\u2022 `/gacha stats` \u2014 Detailed stat breakdown',
+      "\u2022 `/gacha hatch` \u2014 Hatch today's companion (1 per day)",
+      '\u2022 `/gacha view` \u2014 View your latest companion',
+      '\u2022 `/gacha pet` \u2014 Interact with your latest companion',
+      '\u2022 `/gacha stats` \u2014 Collection overview and detailed stats',
       '\u2022 `/gacha leaderboard` \u2014 Top companions by total stats',
       '',
       '**Rarity Tiers:**',
