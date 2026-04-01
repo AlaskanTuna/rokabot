@@ -3,6 +3,7 @@
  * One active game per channel, 6 lives, 120-second idle timeout.
  */
 
+import { config } from '../config.js'
 import { HANGMAN_WORDS } from './data/hangmanWords.js'
 
 export interface HangmanGame {
@@ -44,8 +45,8 @@ export interface GuessWordResult {
   remainingLives: number
 }
 
-const INITIAL_LIVES = 6
-const TIMEOUT_MS = 60_000
+const INITIAL_LIVES = config.games.hangmanLives
+const TIMEOUT_MS = config.games.hangmanTimeoutMs
 
 /** Active games keyed by channel ID. */
 const activeGames = new Map<string, HangmanGame>()

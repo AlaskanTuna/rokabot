@@ -1,3 +1,4 @@
+import { config } from '../config.js'
 import { logger } from '../utils/logger.js'
 
 interface ReactionRule {
@@ -138,8 +139,8 @@ const REACTION_RULES: ReactionRule[] = [
   }
 ]
 
-const PROBABILITY = 0.33
-const COOLDOWN_MS = 180_000
+const PROBABILITY = config.emoji.probability
+const COOLDOWN_MS = config.emoji.cooldownMs
 
 const cooldowns = new Map<string, number>()
 

@@ -3,10 +3,11 @@
  * Supports creation (with per-user cap), due-query, delivery marking, and cleanup.
  */
 
+import { config } from '../config.js'
 import { getDb } from './database.js'
 import { logger } from '../utils/logger.js'
 
-const MAX_ACTIVE_REMINDERS_PER_USER = 5
+const MAX_ACTIVE_REMINDERS_PER_USER = config.reminders.maxPerUser
 
 export interface CreateReminderResult {
   id: number
@@ -77,7 +78,7 @@ export function createReminder(
 export function getDueReminders(): DueReminder[] {
   const db = getDb()
   const now = Date.now()
-  const staleThreshold = now - 5 * 60 * 1000
+  const staleThreshold = now - config.reminders.staleThresholdMs
 
   // Drop stale reminders (past due by more than 5 minutes)
   const stale = db.prepare('UPDATE reminders SET delivered = 1 WHERE delivered = 0 AND due_at < ?').run(staleThreshold)

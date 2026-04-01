@@ -17,10 +17,29 @@ function requiredEnv(key: string): string {
 }
 
 interface YamlConfig {
-  gemini?: { model?: string; timeout?: number; maxRetries?: number; maxOutputTokens?: number }
+  gemini?: {
+    model?: string
+    timeout?: number
+    maxRetries?: number
+    maxOutputTokens?: number
+    baseRetryDelay?: number
+    maxLlmCalls?: number
+  }
   rateLimit?: { rpm?: number; rpd?: number }
   session?: { ttl?: number; windowSize?: number }
   discord?: { maxMessageLength?: number }
+  memory?: {
+    bufferSize?: number
+    extractionInterval?: number
+    extractionGapMs?: number
+    maxFactsPerUser?: number
+    factRetentionDays?: number
+    channelMonitorTtlMs?: number
+  }
+  emoji?: { probability?: number; cooldownMs?: number }
+  reminders?: { checkIntervalMs?: number; maxPerUser?: number; staleThresholdMs?: number }
+  games?: { hangmanLives?: number; hangmanTimeoutMs?: number; shiritoriTimeoutMs?: number; shinyChance?: number }
+  statusCycleMs?: number
   timezone?: string
   logging?: { level?: string }
 }
@@ -71,7 +90,9 @@ export const config = {
     model: envString('GEMINI_MODEL') ?? yaml.gemini?.model ?? 'gemini-2.0-flash-lite',
     timeout: envInt('GEMINI_TIMEOUT') ?? yaml.gemini?.timeout ?? 15_000,
     maxRetries: envInt('GEMINI_MAX_RETRIES') ?? yaml.gemini?.maxRetries ?? 1,
-    maxOutputTokens: envInt('GEMINI_MAX_OUTPUT_TOKENS') ?? yaml.gemini?.maxOutputTokens ?? 300
+    maxOutputTokens: envInt('GEMINI_MAX_OUTPUT_TOKENS') ?? yaml.gemini?.maxOutputTokens ?? 300,
+    baseRetryDelay: yaml.gemini?.baseRetryDelay ?? 2000,
+    maxLlmCalls: yaml.gemini?.maxLlmCalls ?? 4
   },
   logging: {
     level: envString('LOG_LEVEL') ?? yaml.logging?.level ?? 'info'
@@ -82,7 +103,31 @@ export const config = {
   },
   session: {
     ttlMs: envInt('SESSION_TTL_MS') ?? yaml.session?.ttl ?? 300_000,
-    windowSize: envInt('SESSION_WINDOW_SIZE') ?? yaml.session?.windowSize ?? 10
+    windowSize: envInt('SESSION_WINDOW_SIZE') ?? yaml.session?.windowSize ?? 20
   },
+  memory: {
+    bufferSize: yaml.memory?.bufferSize ?? 20,
+    extractionInterval: yaml.memory?.extractionInterval ?? 20,
+    extractionGapMs: yaml.memory?.extractionGapMs ?? 10_000,
+    maxFactsPerUser: yaml.memory?.maxFactsPerUser ?? 10,
+    factRetentionDays: yaml.memory?.factRetentionDays ?? 90,
+    channelMonitorTtlMs: yaml.memory?.channelMonitorTtlMs ?? 86_400_000
+  },
+  emoji: {
+    probability: yaml.emoji?.probability ?? 0.33,
+    cooldownMs: yaml.emoji?.cooldownMs ?? 180_000
+  },
+  reminders: {
+    checkIntervalMs: yaml.reminders?.checkIntervalMs ?? 5_000,
+    maxPerUser: yaml.reminders?.maxPerUser ?? 5,
+    staleThresholdMs: yaml.reminders?.staleThresholdMs ?? 300_000
+  },
+  games: {
+    hangmanLives: yaml.games?.hangmanLives ?? 6,
+    hangmanTimeoutMs: yaml.games?.hangmanTimeoutMs ?? 60_000,
+    shiritoriTimeoutMs: yaml.games?.shiritoriTimeoutMs ?? 60_000,
+    shinyChance: yaml.games?.shinyChance ?? 0.01
+  },
+  statusCycleMs: yaml.statusCycleMs ?? 900_000,
   timezone: (envString('TZ') ?? yaml.timezone) as string | undefined
 } as const

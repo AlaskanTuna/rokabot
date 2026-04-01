@@ -4,26 +4,49 @@
 
 gemini:
   model: gemini-3.1-flash-lite-preview
-  timeout: 25000 # ms, Gemini request timeout
-  maxRetries: 1 # max retry attempts for transient errors
-  maxOutputTokens: 500 # max tokens for Gemini response; set high to avoid cutoff.
+  timeout: 25000
+  maxRetries: 3
+  maxOutputTokens: 500
+  baseRetryDelay: 2000
+  maxLlmCalls: 4
 
 rateLimit:
-  rpm: 15 # requests per minute
-  rpd: 500 # requests per day
+  rpm: 15
+  rpd: 500
 
 session:
-  ttl: 300000 # idle timeout in ms
-  windowSize: 10 # FIFO message window size
+  ttl: 500000
+  windowSize: 20
 
 discord:
-  maxMessageLength: 1500 # Discord message char limit
+  maxMessageLength: 1500
 
-# Timezone for Roka's time-of-day awareness (Layer 3 context prompt).
-# Uses IANA timezone identifiers. Examples:
-# Asia/Tokyo, Asia/Shanghai, America/New_York, Europe/London, UTC
-# If invalid or omitted, falls back to the system's local timezone.
+memory:
+  bufferSize: 20
+  extractionInterval: 20
+  extractionGapMs: 10000
+  maxFactsPerUser: 10
+  factRetentionDays: 90
+  channelMonitorTtlMs: 86400000
+
+emoji:
+  probability: 0.33
+  cooldownMs: 180000
+
+reminders:
+  checkIntervalMs: 5000
+  maxPerUser: 5
+  staleThresholdMs: 300000
+
+games:
+  hangmanLives: 6
+  hangmanTimeoutMs: 60000
+  shiritoriTimeoutMs: 60000
+  shinyChance: 0.01
+
+statusCycleMs: 900000
+
 timezone: Asia/Singapore
 
 logging:
-  level: info # pino log level (debug/info/warn/error)
+  level: info

@@ -5,6 +5,7 @@
  */
 
 import type { Client } from 'discord.js'
+import { config } from '../config.js'
 import { getDueReminders, markDelivered } from '../storage/reminderStore.js'
 import { logger } from '../utils/logger.js'
 
@@ -59,9 +60,9 @@ export function startReminderScheduler(client: Client): void {
         }
       }
     }
-  }, 5_000)
+  }, config.reminders.checkIntervalMs)
 
-  logger.info('Reminder scheduler started (5s interval)')
+  logger.info({ intervalMs: config.reminders.checkIntervalMs }, 'Reminder scheduler started')
 }
 
 export function stopReminderScheduler(): void {

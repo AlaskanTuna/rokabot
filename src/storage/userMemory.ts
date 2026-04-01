@@ -4,10 +4,11 @@
  * Capped at 10 facts per user; oldest (by updated_at) is evicted when full.
  */
 
+import { config } from '../config.js'
 import { getDb } from './database.js'
 import { logger } from '../utils/logger.js'
 
-const MAX_FACTS_PER_USER = 10
+const MAX_FACTS_PER_USER = config.memory.maxFactsPerUser
 
 /**
  * Upsert a fact about a user. If the key already exists, its value and timestamp are updated.

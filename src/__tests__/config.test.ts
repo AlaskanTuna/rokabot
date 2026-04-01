@@ -62,13 +62,42 @@ describe('config module', () => {
 
     expect(config.gemini.model).toBe('gemini-3.1-flash-lite-preview')
     expect(config.gemini.timeout).toBe(25_000)
-    expect(config.gemini.maxRetries).toBe(1)
+    expect(config.gemini.maxRetries).toBe(3)
+    expect(config.gemini.maxOutputTokens).toBe(500)
+    expect(config.gemini.baseRetryDelay).toBe(2000)
+    expect(config.gemini.maxLlmCalls).toBe(4)
     expect(config.logging.level).toBe('info')
     expect(config.rateLimit.rpm).toBe(15)
     expect(config.rateLimit.rpd).toBe(500)
     expect(config.session.ttlMs).toBe(500_000)
-    expect(config.session.windowSize).toBe(10)
+    expect(config.session.windowSize).toBe(20)
     expect(config.discord.maxMessageLength).toBe(1500)
+
+    // Memory
+    expect(config.memory.bufferSize).toBe(20)
+    expect(config.memory.extractionInterval).toBe(20)
+    expect(config.memory.extractionGapMs).toBe(10_000)
+    expect(config.memory.maxFactsPerUser).toBe(10)
+    expect(config.memory.factRetentionDays).toBe(90)
+    expect(config.memory.channelMonitorTtlMs).toBe(86_400_000)
+
+    // Emoji
+    expect(config.emoji.probability).toBe(0.33)
+    expect(config.emoji.cooldownMs).toBe(180_000)
+
+    // Reminders
+    expect(config.reminders.checkIntervalMs).toBe(5_000)
+    expect(config.reminders.maxPerUser).toBe(5)
+    expect(config.reminders.staleThresholdMs).toBe(300_000)
+
+    // Games
+    expect(config.games.hangmanLives).toBe(6)
+    expect(config.games.hangmanTimeoutMs).toBe(60_000)
+    expect(config.games.shiritoriTimeoutMs).toBe(60_000)
+    expect(config.games.shinyChance).toBe(0.01)
+
+    // Status cycle
+    expect(config.statusCycleMs).toBe(900_000)
   })
 
   it('env vars override config.yml values', async () => {

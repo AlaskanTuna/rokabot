@@ -4,7 +4,8 @@ import Database from 'better-sqlite3'
 vi.mock('../../config.js', () => ({
   config: {
     logging: { level: 'silent' },
-    timezone: 'UTC'
+    timezone: 'UTC',
+    games: { hangmanLives: 6, hangmanTimeoutMs: 60_000, shiritoriTimeoutMs: 60_000, shinyChance: 0.01 }
   }
 }))
 

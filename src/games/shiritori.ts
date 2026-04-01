@@ -5,6 +5,7 @@
  */
 
 import { createRequire } from 'node:module'
+import { config } from '../config.js'
 import { logger } from '../utils/logger.js'
 
 const require = createRequire(import.meta.url)
@@ -59,7 +60,7 @@ const STARTER_WORDS = [
   'zebra'
 ]
 
-const TIMEOUT_MS = 60_000 // 1 minute
+const TIMEOUT_MS = config.games.shiritoriTimeoutMs
 
 let dictionary: Set<string> | null = null
 

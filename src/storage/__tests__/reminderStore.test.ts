@@ -3,7 +3,8 @@ import Database from 'better-sqlite3'
 
 vi.mock('../../config.js', () => ({
   config: {
-    logging: { level: 'silent' }
+    logging: { level: 'silent' },
+    reminders: { checkIntervalMs: 5_000, maxPerUser: 5, staleThresholdMs: 300_000 }
   }
 }))
 

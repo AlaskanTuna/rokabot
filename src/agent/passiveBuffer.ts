@@ -18,7 +18,7 @@ interface ChannelBuffer {
   userMap: Map<string, string> // displayName → userId
 }
 
-const BUFFER_SIZE = config.session.windowSize * 2
+const BUFFER_SIZE = config.memory.bufferSize
 const buffers = new Map<string, ChannelBuffer>()
 
 export function addMessage(channelId: string, userId: string, displayName: string, content: string): number {

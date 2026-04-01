@@ -109,9 +109,9 @@ export function startStatusCycler(client: Client): void {
 
   updateStatus()
 
-  intervalId = setInterval(updateStatus, 15 * 60 * 1000)
+  intervalId = setInterval(updateStatus, config.statusCycleMs)
 
-  logger.info('Status cycler started (15min interval)')
+  logger.info({ intervalMs: config.statusCycleMs }, 'Status cycler started')
 }
 
 /** Stop the status cycler. */

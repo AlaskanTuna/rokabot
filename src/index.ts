@@ -38,14 +38,14 @@ client.once('clientReady', () => {
   // Prune old session history on startup
   pruneOldHistory()
 
-  // Prune stale user memory facts on startup (90-day TTL)
-  pruneOldFacts(90)
+  // Prune stale user memory facts on startup
+  pruneOldFacts(config.memory.factRetentionDays)
 
   // Schedule hourly pruning for session history
   setInterval(() => pruneOldHistory(), 60 * 60 * 1000)
 
   // Schedule daily pruning for stale user memory facts
-  setInterval(() => pruneOldFacts(90), 24 * 60 * 60 * 1000)
+  setInterval(() => pruneOldFacts(config.memory.factRetentionDays), 24 * 60 * 60 * 1000)
 
   // Schedule hourly cleanup for expired channel monitors
   setInterval(() => cleanupExpired(), 60 * 60 * 1000)

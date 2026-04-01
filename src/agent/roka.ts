@@ -367,8 +367,8 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
     'Sending ADK request'
   )
 
-  const MAX_RETRIES = 3
-  const BASE_DELAY_MS = 2000
+  const MAX_RETRIES = config.gemini.maxRetries
+  const BASE_DELAY_MS = config.gemini.baseRetryDelay
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
@@ -382,7 +382,7 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
           sessionId: channelId,
           newMessage,
           stateDelta: { _systemPrompt: systemPrompt, participants, _userId: userId, _channelId: channelId },
-          runConfig: { maxLlmCalls: 4 }
+          runConfig: { maxLlmCalls: config.gemini.maxLlmCalls }
         })) {
           if (abortController.signal.aborted) break
           if (isFinalResponse(event) && event.content?.parts) {

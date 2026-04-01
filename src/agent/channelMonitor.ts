@@ -4,9 +4,10 @@
  * expire after 24 hours of no interaction.
  */
 
+import { config } from '../config.js'
 import { logger } from '../utils/logger.js'
 
-const MONITOR_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
+const MONITOR_TTL_MS = config.memory.channelMonitorTtlMs
 
 const monitoredChannels = new Map<string, number>() // channelId → expiry timestamp
 

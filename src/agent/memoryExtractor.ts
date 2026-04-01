@@ -11,12 +11,11 @@ import { logger } from '../utils/logger.js'
 import { saveFact, getFacts } from '../storage/userMemory.js'
 import { getMessages, clearBuffer, type BufferedMessage } from './passiveBuffer.js'
 
-const EXTRACTION_INTERVAL = config.session.windowSize * 2
+const EXTRACTION_INTERVAL = config.memory.extractionInterval
 const MIN_RPM_HEADROOM = 3
 
 // Simple self-rate-limit: track last extraction time
 let lastExtractionTime = 0
-const MIN_EXTRACTION_GAP_MS = 10_000 // At least 10s between extractions
 
 // Lazy-init Gemini client
 let genaiClient: GoogleGenAI | null = null
@@ -28,17 +27,21 @@ function getClient(): GoogleGenAI {
   return genaiClient
 }
 
-const EXTRACTION_PROMPT = `You are a fact extractor. Given a conversation between users and an assistant, extract personal facts about the USERS (not the assistant).
+const EXTRACTION_PROMPT = `You are a fact extractor. Given a conversation between users, extract personal facts and behavioral cues about the USERS.
 
 Rules:
-- Only extract concrete, reusable facts: names/nicknames, preferences, favorites, hobbies, birthdays, locations, relationships
-- Do NOT extract temporary states ("I'm hungry right now"), opinions about the conversation, or facts about the assistant
+- Extract concrete facts: names/nicknames, preferences, favorites, hobbies, birthdays, locations, relationships
+- Extract lifestyle cues: pets, daily habits, occupation, routines, what they're currently watching/playing/reading
+- Extract current interests: ongoing activities, recent events in their life, things they're excited about
+- Extract personality traits: humor style, recurring topics, how they interact with others
+- Do NOT extract temporary emotions ("I'm bored right now"), reactions to the conversation itself, or facts about the assistant/bot
 - Do NOT extract facts that are questions or uncertain ("I might like...")
-- Each fact needs: the user's name (from the [Name] prefix), a short key, and the value
+- Each fact needs: the user's name (from the [Name] prefix), a short descriptive key, and the value
+- Prefer specific keys like "currently_watching", "has_pet", "occupation", "hobby" over vague ones
 - If no facts are worth extracting, return an empty array
 
 Return ONLY a JSON array, no markdown, no explanation:
-[{"userId":"Alice","key":"favorite_anime","value":"Frieren"},{"userId":"Bob","key":"nickname","value":"Ali"}]
+[{"userId":"Alice","key":"currently_watching","value":"Dandadan"},{"userId":"Bob","key":"has_pet","value":"cat"}]
 Or if none: []
 
 Conversation:
@@ -56,11 +59,11 @@ interface ExtractedFact {
  */
 export function maybeExtractFromBuffer(channelId: string): void {
   const messages = getMessages(channelId)
-  if (messages.length < config.session.windowSize) return // Not enough context
+  if (messages.length < config.memory.extractionInterval) return // Not enough context
 
   // Self-rate-limit
   const now = Date.now()
-  if (now - lastExtractionTime < MIN_EXTRACTION_GAP_MS) {
+  if (now - lastExtractionTime < config.memory.extractionGapMs) {
     logger.debug({ channelId }, 'Memory extraction skipped (too recent)')
     return
   }

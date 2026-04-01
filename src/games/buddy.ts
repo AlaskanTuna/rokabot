@@ -164,8 +164,8 @@ export function generateBuddy(userId: string, dateSeed?: string): BuddyData {
   const speciesPool = SPECIES.filter((s) => s.rarity === rarity)
   const speciesInfo = speciesPool[Math.floor(rng() * speciesPool.length)]
 
-  // 1% shiny
-  const shiny = rng() < 0.01
+  // Shiny chance from config
+  const shiny = rng() < config.games.shinyChance
 
   // Cosmetics
   const eyes = EYE_STYLES[Math.floor(rng() * EYE_STYLES.length)]
