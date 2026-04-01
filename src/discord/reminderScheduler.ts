@@ -40,8 +40,20 @@ export function startReminderScheduler(client: Client): void {
           }
         }
       } catch (error) {
-        logger.error({ reminderId: reminder.id, error }, 'Failed to deliver reminder')
-        // Don't mark as delivered — will retry next cycle
+        // Channel fetch/send failed (e.g., 403 Missing Access in uninvited servers)
+        // Try DM fallback before giving up
+        logger.warn({ reminderId: reminder.id, error }, 'Channel delivery failed, attempting DM fallback')
+        try {
+          const user = await client.users.fetch(reminder.userId)
+          await user.send(
+            `Hey~ you asked me to remind you: "${reminder.reminder}" \u266a\n\n-# (Sent as DM because I couldn't reach the original channel)`
+          )
+          markDelivered(reminder.id)
+          logger.info({ reminderId: reminder.id, userId: reminder.userId }, 'Reminder delivered via DM (channel fallback)')
+        } catch (dmError) {
+          markDelivered(reminder.id)
+          logger.warn({ reminderId: reminder.id }, 'Both channel and DM delivery failed, marking delivered')
+        }
       }
     }
   }, 60_000)
