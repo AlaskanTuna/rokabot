@@ -256,6 +256,93 @@ async function main() {
     `Got ${userMessages.length}`
   )
 
+  // ─── Edge Cases ───
+  console.log('\n  --- Edge Cases ---')
+
+  // Buffer: empty content messages should still work
+  resetAllBuffers()
+  const emptyCount = addMessage('edge-ch', 'user1', 'Alice', '')
+  assert(getMessageCount('edge-ch') === 0 || emptyCount >= 0, 'Edge: empty message handled', 'No crash', 'Crashed')
+
+  // Buffer: very long message (10K chars)
+  resetAllBuffers()
+  const longMsg = 'x'.repeat(10000)
+  addMessage('edge-ch2', 'user1', 'Alice', longMsg)
+  assert(getMessages('edge-ch2').length === 1, 'Edge: long message stored', '1 message', 'Failed')
+  assert(
+    getMessages('edge-ch2')[0].content.length === 10000,
+    'Edge: long message not truncated',
+    '10000 chars',
+    `Got ${getMessages('edge-ch2')[0].content.length}`
+  )
+
+  // Buffer: special characters (unicode, emoji, newlines)
+  resetAllBuffers()
+  addMessage('edge-ch3', 'user1', 'Alice', 'こんにちは 🎉\nNew line here')
+  const specialMsg = getMessages('edge-ch3')[0]
+  assert(specialMsg.content.includes('🎉'), 'Edge: emoji preserved', 'Emoji intact', 'Emoji lost')
+  assert(specialMsg.content.includes('\n'), 'Edge: newline preserved', 'Newline intact', 'Newline lost')
+
+  // Monitor: multiple channels independently tracked
+  resetMonitor()
+  markActive('multi-ch-1')
+  markActive('multi-ch-2')
+  assert(
+    isMonitored('multi-ch-1') && isMonitored('multi-ch-2'),
+    'Edge: multi-channel monitoring',
+    'Both monitored',
+    'Missing one'
+  )
+  assert(getMonitoredCount() === 2, 'Edge: monitor count', '2 channels', `Got ${getMonitoredCount()}`)
+  assert(!isMonitored('multi-ch-3'), 'Edge: unmonitored channel', 'false', 'Should be false')
+
+  // Dedup: rapid duplicate saves (race condition simulation)
+  saveFact('race-user', 'test', 'value1')
+  saveFact('race-user', 'test', 'value1')
+  saveFact('race-user', 'test', 'value1')
+  assert(countFacts('race-user') === 1, 'Edge: rapid duplicate saves', '1 fact', `Got ${countFacts('race-user')}`)
+
+  // Prune: user with exactly 90-day-old fact (boundary — survives, 91-day gets pruned)
+  saveFact('boundary-user', 'edge_fact', 'boundary_test')
+  const exactlyNinetyDays = Date.now() - 90 * 24 * 60 * 60 * 1000
+  db.prepare('UPDATE user_memory SET updated_at = ? WHERE user_id = ?').run(exactlyNinetyDays, 'boundary-user')
+  pruneOldFacts(90)
+  assert(
+    countFacts('boundary-user') === 1,
+    'Edge: 90-day boundary survives',
+    'Fact kept at exact boundary (< is strict)',
+    `Unexpected: ${countFacts('boundary-user')}`
+  )
+  // 91 days old SHOULD be pruned
+  const ninetyOneDays = Date.now() - 91 * 24 * 60 * 60 * 1000
+  db.prepare('UPDATE user_memory SET updated_at = ? WHERE user_id = ?').run(ninetyOneDays, 'boundary-user')
+  pruneOldFacts(90)
+  assert(
+    countFacts('boundary-user') === 0,
+    'Edge: 91-day boundary pruned',
+    'Fact removed past boundary',
+    `Fact survived: ${countFacts('boundary-user')}`
+  )
+
+  // Refresh: refreshing non-existent user doesn't crash
+  refreshFactTimestamps('nonexistent-user-12345')
+  pass('Edge: refresh non-existent user', 'No crash')
+
+  // Prune: pruning empty table doesn't crash
+  const emptyPrune = pruneOldFacts(1)
+  assert(emptyPrune >= 0, 'Edge: prune empty/clean table', `${emptyPrune} pruned`, 'Crashed')
+
+  // Parse: malformed JSON edge cases
+  assert(parseFacts('[{]').length === 0, 'Edge: malformed JSON', 'Returns []', 'Should be empty')
+  assert(parseFacts('null').length === 0, 'Edge: null input', 'Returns []', 'Should be empty')
+  assert(parseFacts('').length === 0, 'Edge: empty string', 'Returns []', 'Should be empty')
+  assert(
+    parseFacts('[{"userId":"A","key":"k","value":"v"},null,42]').length === 1,
+    'Edge: mixed array (valid + invalid)',
+    '1 valid fact filtered',
+    'Wrong count'
+  )
+
   // ─── Live Gemini Extraction (optional) ───
   if (process.env.GOOGLE_GENAI_API_KEY) {
     console.log('\n  --- Live Gemini Extraction ---')

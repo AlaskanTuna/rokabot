@@ -11,7 +11,11 @@ const MONITOR_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours
 const monitoredChannels = new Map<string, number>() // channelId → expiry timestamp
 
 export function markActive(channelId: string): void {
+  const isNew = !monitoredChannels.has(channelId)
   monitoredChannels.set(channelId, Date.now() + MONITOR_TTL_MS)
+  if (isNew) {
+    logger.info({ channelId, totalMonitored: monitoredChannels.size }, 'Channel now monitored for passive memory')
+  }
 }
 
 export function isMonitored(channelId: string): boolean {

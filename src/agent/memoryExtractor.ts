@@ -60,8 +60,13 @@ export function maybeExtractFromBuffer(channelId: string): void {
 
   // Self-rate-limit
   const now = Date.now()
-  if (now - lastExtractionTime < MIN_EXTRACTION_GAP_MS) return
+  if (now - lastExtractionTime < MIN_EXTRACTION_GAP_MS) {
+    logger.debug({ channelId }, 'Memory extraction skipped (too recent)')
+    return
+  }
   lastExtractionTime = now
+
+  logger.info({ channelId, messageCount: messages.length }, 'Passive buffer full, triggering memory extraction')
 
   // Clear buffer immediately so new messages start a fresh batch
   clearBuffer(channelId)
