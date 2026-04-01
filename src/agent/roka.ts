@@ -17,6 +17,7 @@ import { config } from '../config.js'
 import { rokaTools } from './tools/index.js'
 import { saveMessage, loadHistory } from '../storage/sessionStore.js'
 import { getAllFactsForPrompt } from '../storage/userMemory.js'
+import { maybeExtractMemory } from './memoryExtractor.js'
 
 export interface ImageAttachment {
   url: string
@@ -440,6 +441,9 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
         } catch (error) {
           logger.warn({ channelId, error }, 'Failed to persist messages to SQLite')
         }
+
+        // Background memory extraction — non-blocking, fire-and-forget
+        maybeExtractMemory(channelId, userId, displayName, userMessage)
       }
 
       logger.debug({ responseLength: responseText.length }, 'ADK response extracted')

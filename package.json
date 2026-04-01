@@ -17,7 +17,8 @@
     "test:chat": "tsx scripts/test-chat.ts",
     "test:smoke": "tsx scripts/test-adk-smoke.ts",
     "test:features": "tsx scripts/test-features.ts",
-    "test:phase8": "tsx scripts/test-phase8.ts"
+    "test:phase8": "tsx scripts/test-phase8.ts",
+    "test:memory": "tsx scripts/test-memory-extraction.ts"
   },
   "dependencies": {
     "@google/adk": "^0.1.0",
