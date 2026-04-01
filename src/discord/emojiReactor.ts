@@ -144,10 +144,7 @@ const COOLDOWN_MS = config.emoji.cooldownMs
 
 const cooldowns = new Map<string, number>()
 
-/**
- * Find the first reaction rule that matches the given content.
- * Returns the matched rule or null if none match.
- */
+/** Find the first reaction rule matching the given content */
 function findMatchingRule(content: string): ReactionRule | null {
   for (const rule of REACTION_RULES) {
     let matchCount = 0
@@ -164,28 +161,20 @@ function findMatchingRule(content: string): ReactionRule | null {
   return null
 }
 
-/**
- * Check if a message should receive a passive emoji reaction from Roka.
- * Returns the emoji to react with, or null if no reaction.
- */
+/** Check if a message should receive a passive emoji reaction */
 export function shouldReact(content: string, channelId: string): string | null {
-  // Check cooldown
   const lastReaction = cooldowns.get(channelId)
   if (lastReaction !== undefined && Date.now() - lastReaction < COOLDOWN_MS) {
     return null
   }
 
-  // Find matching rule
   const rule = findMatchingRule(content)
   if (!rule) return null
 
-  // Probability gate
   if (Math.random() >= PROBABILITY) return null
 
-  // Update cooldown
   cooldowns.set(channelId, Date.now())
 
-  // Pick random emoji from pool
   const emoji = rule.emoji[Math.floor(Math.random() * rule.emoji.length)]
 
   logger.debug({ channelId, emoji, patternCount: rule.patterns.length }, 'Passive emoji reaction triggered')
@@ -193,7 +182,7 @@ export function shouldReact(content: string, channelId: string): string | null {
   return emoji
 }
 
-/** Reset all cooldowns. Exported for testing purposes. */
+/** Reset all cooldowns for testing */
 export function resetCooldowns(): void {
   cooldowns.clear()
 }

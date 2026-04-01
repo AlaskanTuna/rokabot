@@ -5,7 +5,7 @@ import type { ToneKey } from '../agent/prompts/tones.js'
 import { getToneStyle } from './toneStyles.js'
 import { getExpressionUrl } from './expressions.js'
 
-/** Build a Components V2 container message with tone-appropriate color and expression thumbnail. */
+/** Build a Components V2 container message with tone-appropriate styling */
 export function buildRokaMessage(text: string, tone: ToneKey) {
   const style = getToneStyle(tone)
   const imageUrl = getExpressionUrl(tone) || style.imageUrl

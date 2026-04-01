@@ -1,4 +1,4 @@
-/** /chat slash command — the primary way users talk with Roka. */
+/** /chat slash command definition */
 
 import { SlashCommandBuilder } from 'discord.js'
 

@@ -1,4 +1,4 @@
-/** Anime search via the Jikan (MyAnimeList) API with filtering and sorting support. */
+/** Anime search via the Jikan (MyAnimeList) API */
 
 import { logger } from '../../utils/logger.js'
 import { jikanThrottle } from './jikanThrottle.js'
@@ -46,7 +46,7 @@ interface JikanResponse {
   data?: JikanAnimeEntry[]
 }
 
-/** Search for anime by title or keyword with optional type/status filters and sorting. */
+/** Search for anime by title or keyword with optional filters and sorting */
 export async function searchAnime(params: SearchAnimeParams): Promise<SearchAnimeResult> {
   const query = (params.query ?? '').trim()
   const hasFilters = params.sort_by || params.type || params.status

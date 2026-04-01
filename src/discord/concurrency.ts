@@ -1,8 +1,4 @@
-/**
- * Per-channel concurrency guard.
- * Tracks channels with an in-flight Gemini request to prevent
- * multiple simultaneous requests per channel.
- */
+/** Per-channel concurrency guard preventing simultaneous requests */
 
 const activeRequests = new Set<string>()
 

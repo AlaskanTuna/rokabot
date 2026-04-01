@@ -1,8 +1,4 @@
-/**
- * Passive message ring buffer — stores recent messages per monitored channel.
- * Buffer size is 2x the configured session window size (from config.yml).
- * Used by the background memory extractor to capture facts from regular chat.
- */
+/** Passive message ring buffer for monitored channels */
 
 import { config } from '../config.js'
 
@@ -46,7 +42,6 @@ export function clearBuffer(channelId: string): void {
   const buf = buffers.get(channelId)
   if (buf) {
     buf.messages = []
-    // Keep userMap — we still need it for future extractions
   }
 }
 
@@ -54,7 +49,7 @@ export function getMessageCount(channelId: string): number {
   return buffers.get(channelId)?.messages.length ?? 0
 }
 
-/** Reset all buffers — for testing. */
+/** Reset all buffers for testing */
 export function resetAllBuffers(): void {
   buffers.clear()
 }

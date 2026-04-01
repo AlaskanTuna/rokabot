@@ -9,7 +9,7 @@ export interface RollDiceResult {
   description: string
 }
 
-/** Roll 1-10 dice with 2-100 sides each, clamping inputs to safe bounds. */
+/** Roll 1-10 dice with 2-100 sides each, clamping inputs to safe bounds */
 export function rollDice(params: RollDiceParams): RollDiceResult {
   const count = Math.max(1, Math.min(10, Math.floor(params.count ?? 1)))
   const sides = Math.max(2, Math.min(100, Math.floor(params.sides ?? 6)))

@@ -6,7 +6,7 @@ import { toolCommands } from '../commands/tools.js'
 import { gameCommands } from '../commands/games.js'
 import { startStatusCycler } from '../statusCycler.js'
 
-/** Set presence, register slash commands, and log startup on Discord ready. */
+/** Register slash commands and log startup on Discord ready */
 export async function handleReady(client: Client): Promise<void> {
   logger.info({ user: client.user?.tag }, 'Roka is online!')
 

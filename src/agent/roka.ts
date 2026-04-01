@@ -1,7 +1,4 @@
-/**
- * Roka agent — orchestrates the ADK pipeline for in-character response generation.
- * Manages per-channel ADK sessions, idle timers, tone detection, and image handling.
- */
+/** ADK pipeline orchestrator for in-character response generation */
 
 import { LlmAgent, Runner, InMemorySessionService, isFinalResponse, BasePlugin, createEvent } from '@google/adk'
 import type { LlmResponse, Event } from '@google/adk'
@@ -39,13 +36,10 @@ export interface GenerateResult {
 const MAX_IMAGE_SIZE_BYTES = 4 * 1024 * 1024
 const APP_NAME = 'rokabot'
 
-// Per-channel consecutive error counter — only destroy session after 2+ consecutive fallbacks
 const sessionErrorCounts = new Map<string, number>()
-
-// Reset per request to track tool fallback chains within a single invocation
 let toolCallsThisRequest: string[] = []
 
-/** Caps event history returned by getSession to keep context within budget. */
+/** Caps event history returned by getSession to keep context within budget */
 class WindowedSessionService extends InMemorySessionService {
   constructor(private maxEvents: number) {
     super()
@@ -74,7 +68,6 @@ const rokaAgent = new LlmAgent({
     maxOutputTokens: config.gemini.maxOutputTokens,
     httpOptions: { timeout: config.gemini.timeout }
   },
-  // Inject the assembled system prompt from session state before each LLM call
   beforeModelCallback: async ({ context, request }) => {
     const prompt = context.state.get<string>('_systemPrompt')
     if (prompt) {
@@ -83,7 +76,6 @@ const rokaAgent = new LlmAgent({
     }
     return undefined
   },
-  // Strip "[Roka]:" prefixes the model sometimes generates, and inject fallback on empty
   afterModelCallback: async ({ response }) => {
     if (!response.content?.parts) return undefined
 
@@ -108,7 +100,7 @@ const rokaAgent = new LlmAgent({
   }
 })
 
-/** Intercepts Gemini API errors and returns an in-character fallback instead of crashing. */
+/** Intercepts Gemini API errors and returns an in-character fallback */
 class ErrorRecoveryPlugin extends BasePlugin {
   async onModelErrorCallback({
     error
@@ -129,8 +121,6 @@ const runner = new Runner({
   plugins: [new ErrorRecoveryPlugin('error-recovery')]
 })
 
-// Per-channel idle timers — destroys the ADK session after TTL inactivity
-
 const idleTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
 function resetIdleTimer(channelId: string): void {
@@ -145,7 +135,7 @@ function resetIdleTimer(channelId: string): void {
   idleTimers.set(channelId, timer)
 }
 
-/** Retrieve or create an ADK session for the given channel. */
+/** Retrieve or create an ADK session for the given channel */
 async function ensureSession(channelId: string) {
   let session = await sessionService.getSession({
     appName: APP_NAME,
@@ -162,7 +152,6 @@ async function ensureSession(channelId: string) {
     })
     logger.info({ channelId }, 'ADK session created')
 
-    // Cold-start rehydration: replay persisted history into the fresh ADK session
     try {
       const prior = loadHistory(channelId, config.session.windowSize)
       if (prior.length > 0) {
@@ -183,7 +172,6 @@ async function ensureSession(channelId: string) {
           })
           await sessionService.appendEvent({ session, event })
         }
-        // Re-fetch session to pick up the newly added events
         session = (await sessionService.getSession({
           appName: APP_NAME,
           userId: channelId,
@@ -199,7 +187,7 @@ async function ensureSession(channelId: string) {
   return session
 }
 
-/** Clear the idle timer and delete the ADK session for a channel. */
+/** Clear the idle timer and delete the ADK session for a channel */
 export async function destroySession(channelId: string): Promise<void> {
   const timer = idleTimers.get(channelId)
   if (timer) {
@@ -216,12 +204,10 @@ export async function destroySession(channelId: string): Promise<void> {
       sessionId: channelId
     })
     logger.info({ channelId }, 'ADK session destroyed')
-  } catch {
-    // Session may not exist
-  }
+  } catch {}
 }
 
-/** Destroy every active ADK session — called during graceful shutdown. */
+/** Destroy every active ADK session for graceful shutdown */
 export async function destroyAllSessions(): Promise<void> {
   const channels = [...idleTimers.keys()]
   for (const channelId of channels) {
@@ -230,7 +216,7 @@ export async function destroyAllSessions(): Promise<void> {
   logger.info('All ADK sessions destroyed')
 }
 
-/** Download an image and return its base64-encoded data, or null if it fails/exceeds 4 MB. */
+/** Download an image as base64, returning null if it fails or exceeds 4 MB */
 async function downloadImage(url: string): Promise<{ data: string; mimeType: string } | null> {
   try {
     const response = await fetch(url)
@@ -262,7 +248,7 @@ async function downloadImage(url: string): Promise<{ data: string; mimeType: str
   }
 }
 
-/** Get the current hour (0-23) in the configured timezone, or system time as fallback. */
+/** Get the current hour (0-23) in the configured timezone */
 function getLocalHour(): number {
   const tz = config.timezone
   if (!tz) return new Date().getHours()
@@ -287,7 +273,7 @@ function getRandomFallback(): string {
   return fallbacks[Math.floor(Math.random() * fallbacks.length)]
 }
 
-/** Convert ADK session events to WindowMessages for tone detection. */
+/** Convert ADK session events to WindowMessages for tone detection */
 function eventsToWindowMessages(events: Event[]): WindowMessage[] {
   return events
     .filter((e) => e.content?.parts?.some((p: Part) => p.text && !p.thought))
@@ -302,8 +288,7 @@ function eventsToWindowMessages(events: Event[]): WindowMessage[] {
     }))
 }
 
-/**
- * Generate an in-character response using the ADK agent pipeline.
+/** Generate an in-character response using the ADK agent pipeline
  * @param options - Channel ID, user message, display name, and optional image attachments
  * @returns Response text and detected tone
  */
@@ -315,23 +300,20 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
   const session = await ensureSession(channelId)
   resetIdleTimer(channelId)
 
-  // Track participants across the session
   const storedParticipants = (session.state?.participants as string[]) ?? []
   const participants = [...new Set([...storedParticipants, displayName])]
 
-  // Detect tone from recent session history
   const fakeMessages = eventsToWindowMessages(session.events ?? [])
   const hour = getLocalHour()
   const tone = detectTone(fakeMessages, hour)
 
   let systemPrompt = assembleSystemPrompt({ tone, participants, hour, displayName })
 
-  // Inject per-user relationship memory into the system prompt
   try {
     const userFacts = getAllFactsForPrompt(userId)
     if (userFacts) {
       systemPrompt += `\n\n## What You Remember About ${displayName}\n- ${userFacts}`
-      refreshFactTimestamps(userId) // Touch timestamps so active facts don't expire
+      refreshFactTimestamps(userId)
     }
   } catch (error) {
     logger.warn({ userId, error }, 'Failed to load user memory for prompt injection')
@@ -343,7 +325,6 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
 
   logger.debug({ tone, participantCount: participants.length, hour }, 'Prompt assembled')
 
-  // Build user message content with optional images
   const imageParts: Part[] = []
   if (imageAttachments?.length) {
     const downloads = await Promise.all(imageAttachments.map((img) => downloadImage(img.url)))
@@ -406,7 +387,6 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
         responseText = getRandomFallback()
       }
 
-      // Track consecutive fallbacks — only destroy session after 2+ in a row
       if (KNOWN_FALLBACKS.has(responseText)) {
         const errorCount = (sessionErrorCounts.get(channelId) ?? 0) + 1
         sessionErrorCounts.set(channelId, errorCount)
@@ -423,17 +403,14 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
         }
       }
 
-      // Reset error counter on successful (non-fallback) response
       if (!KNOWN_FALLBACKS.has(responseText)) {
         sessionErrorCounts.delete(channelId)
       }
 
-      // Log tool fallback chains when multiple tools were called in a single request
       if (toolCallsThisRequest.length > 1) {
         logger.info({ tools: toolCallsThisRequest }, 'Tool fallback chain detected')
       }
 
-      // Write-behind: persist the exchange to SQLite (non-blocking — failures don't break the response)
       if (!KNOWN_FALLBACKS.has(responseText)) {
         try {
           saveMessage(channelId, 'user', displayName, userMessage)
@@ -449,7 +426,6 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
       const errDetail =
         error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error
 
-      // Check if this is a transient API error worth retrying
       const errorMsg = error instanceof Error ? error.message : String(error)
       const isTransient =
         /429|500|503|RESOURCE_EXHAUSTED|overloaded|quota|rate.limit|unavailable|EAI_AGAIN|ECONNRESET|ETIMEDOUT|fetch failed/i.test(
@@ -468,7 +444,6 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
 
       logger.error({ error: errDetail, channelId, attempt: attempt + 1 }, 'ADK request failed')
 
-      // If session is corrupted or too large, destroy it so the next request starts fresh.
       if (error instanceof SyntaxError) {
         logger.warn({ channelId }, 'Session likely corrupted, destroying for recovery')
         await destroySession(channelId)
@@ -478,6 +453,5 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
     }
   }
 
-  // Should never reach here, but TypeScript needs it
   throw new Error('Exhausted all retry attempts')
 }

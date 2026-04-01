@@ -1,10 +1,6 @@
-/**
- * Layer 3: Channel Awareness
- * Dynamically generated per request. Provides situational context.
- * Budget: ~50-100 tokens
- */
+/** Layer 3: Dynamically generated situational context */
 
-/** Build the situational context layer (time-of-day, current speaker, group participants). */
+/** Build the situational context layer */
 export function buildContextPrompt(participants: string[], hour: number, displayName: string): string {
   const lines: string[] = ['## Situation']
 
@@ -21,7 +17,7 @@ export function buildContextPrompt(participants: string[], hour: number, display
   return lines.join('\n')
 }
 
-/** Map hour (0-23) to a time-of-day description with Roka-flavored activity hints. */
+/** Map hour (0-23) to a time-of-day description */
 function getTimeOfDay(hour: number): string {
   if (hour >= 5 && hour < 9) return 'early morning — you might mention preparing breakfast or opening up the shop'
   if (hour >= 9 && hour < 12) return 'morning — a calm and productive time at the shop'

@@ -1,4 +1,4 @@
-/** Slash command definitions for direct tool invocations (dice, coin, time, anime, weather, search). */
+/** Slash command definitions for direct tool invocations */
 
 import { SlashCommandBuilder } from 'discord.js'
 

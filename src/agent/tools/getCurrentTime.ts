@@ -13,7 +13,6 @@ export interface GetCurrentTimeResult {
   timezone: string
 }
 
-// Common city names mapped to IANA timezone identifiers
 const cityToTimezone: Record<string, string> = {
   // UTC / GMT
   utc: 'UTC',
@@ -132,13 +131,12 @@ const cityToTimezone: Record<string, string> = {
   nairobi: 'Africa/Nairobi'
 }
 
-/** Resolve a location string to an IANA timezone, trying config default, IANA paths, then city lookup. */
+/** Resolve a location string to an IANA timezone */
 function resolveTimezone(location?: string): { timezone: string; resolved: boolean } {
   if (!location) {
     return { timezone: config.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone, resolved: true }
   }
 
-  // Direct IANA timezone (contains '/')
   if (location.includes('/')) {
     return { timezone: location, resolved: true }
   }
@@ -149,11 +147,10 @@ function resolveTimezone(location?: string): { timezone: string; resolved: boole
     return { timezone: mapped, resolved: true }
   }
 
-  // Unknown city — try using it as-is (Intl will throw if invalid)
   return { timezone: location, resolved: false }
 }
 
-/** Get the current time, date, and weekday for a location or the configured default timezone. */
+/** Get the current time, date, and weekday for a location */
 export function getCurrentTime(params: GetCurrentTimeParams): GetCurrentTimeResult {
   const { timezone, resolved } = resolveTimezone(params.location)
   const use12h = params.format === '12h'
@@ -184,7 +181,6 @@ export function getCurrentTime(params: GetCurrentTimeParams): GetCurrentTimeResu
 
     return { location, time, date, day, timezone }
   } catch {
-    // Invalid timezone string — fall back to config timezone
     if (!resolved) {
       return getCurrentTime({ ...params, location: undefined })
     }

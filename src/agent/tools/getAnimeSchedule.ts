@@ -1,7 +1,4 @@
-/**
- * Anime schedule lookups via the Jikan (MyAnimeList) API.
- * Supports day, week, season scopes and specific anime broadcast lookups.
- */
+/** Anime schedule lookups via the Jikan (MyAnimeList) API */
 
 import { config } from '../../config.js'
 import { logger } from '../../utils/logger.js'
@@ -70,7 +67,6 @@ interface JikanResponse {
 
 const VALID_DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const
 
-// Timezones shown alongside JST broadcast times
 const BROADCAST_TIMEZONES: Record<string, string> = {
   JST: 'Asia/Tokyo',
   EST: 'America/New_York',
@@ -96,7 +92,7 @@ function getCurrentSeason(): { season: string; year: number } {
   return { season: 'fall', year }
 }
 
-/** Convert a JST broadcast time (HH:MM) to multiple timezone equivalents. */
+/** Convert a JST broadcast time (HH:MM) to multiple timezone equivalents */
 function convertBroadcastTime(time: string | null): Record<string, string> | null {
   if (!time) return null
 
@@ -107,7 +103,6 @@ function convertBroadcastTime(time: string | null): Record<string, string> | nul
   const minute = parseInt(match[2], 10)
   if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null
 
-  // Build a Date anchored in JST (Asia/Tokyo) with the given hour:minute
   const base = new Date()
   const jstDateStr = base.toLocaleDateString('en-US', {
     timeZone: 'Asia/Tokyo',
@@ -118,8 +113,7 @@ function convertBroadcastTime(time: string | null): Record<string, string> | nul
   const [m, d, y] = jstDateStr.split('/')
   const isoBase = `${y}-${m}-${d}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`
 
-  // Parse as JST by computing the UTC equivalent
-  const jstOffset = 9 * 60 // JST = UTC+9
+  const jstOffset = 9 * 60
   const parsed = new Date(isoBase)
   const utcMs = parsed.getTime() + parsed.getTimezoneOffset() * 60_000 - jstOffset * 60_000
 
@@ -180,7 +174,7 @@ function clampLimit(limit: number | undefined): number {
   return Math.max(1, Math.min(25, limit))
 }
 
-/** Fetch from Jikan API with rate-limit throttling. */
+/** Fetch from Jikan API with rate-limit throttling */
 async function fetchJikan(url: string): Promise<JikanResponse | null> {
   try {
     await jikanThrottle()
@@ -260,10 +254,7 @@ async function handleSeason(sortBy: string, limit: number): Promise<GetAnimeSche
   return { scope: 'season', label, entries, total }
 }
 
-/**
- * Fetch anime airing schedule by scope (day/week/season) or specific anime name.
- * @returns Schedule entries sorted and limited per params
- */
+/** Fetch anime airing schedule by scope or specific anime name */
 export async function getAnimeSchedule(params: GetAnimeScheduleParams): Promise<GetAnimeScheduleResult> {
   const { scope, day, sort_by = 'score', anime } = params
   const limit = clampLimit(params.limit)

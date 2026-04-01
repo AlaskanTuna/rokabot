@@ -1,9 +1,6 @@
 import { config } from '../config.js'
 
-/**
- * In-character response pools for rate limiting and error handling.
- * These messages are sent without calling the LLM.
- */
+/** In-character response pools for rate limiting and error handling */
 
 const DECLINE_MESSAGES = [
   'ちょっと待ってね~ Give me a moment.',
@@ -39,10 +36,7 @@ export function getRandomError(): string {
   return ERROR_MESSAGES[Math.floor(Math.random() * ERROR_MESSAGES.length)]
 }
 
-/**
- * Split long responses to fit within Discord's message character limit.
- * Prefers splitting at newlines, then spaces, to avoid mid-word breaks.
- */
+/** Split long responses to fit within Discord's message character limit */
 export function splitResponse(text: string, maxLength = config.discord.maxMessageLength): string[] {
   if (text.length <= maxLength) return [text]
 

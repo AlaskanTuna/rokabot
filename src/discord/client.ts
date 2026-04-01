@@ -6,7 +6,7 @@ import { handleReady } from './events/ready.js'
 import { createInteractionHandler } from './events/interactionCreate.js'
 import { createMessageHandler } from './events/messageCreate.js'
 
-/** Create and configure the Discord.js client with event handlers and rate limiting. */
+/** Create and configure the Discord.js client with event handlers and rate limiting */
 export function createClient(): Client {
   const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],

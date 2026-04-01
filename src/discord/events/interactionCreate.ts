@@ -9,7 +9,7 @@ import { isChannelBusy, markBusy, markFree } from '../concurrency.js'
 import { createToolCommandHandler } from './toolCommands.js'
 import { createGameCommandHandler } from './gameCommands.js'
 
-/** Create a handler for all slash command interactions (chat + tool + game commands). */
+/** Create a handler for all slash command interactions */
 export function createInteractionHandler(rateLimiter: RateLimiter, client?: Client) {
   const handleToolCommand = createToolCommandHandler(rateLimiter)
   const handleGameCommand = createGameCommandHandler(client)

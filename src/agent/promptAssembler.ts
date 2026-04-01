@@ -10,10 +10,7 @@ export interface AssemblerInput {
   displayName: string
 }
 
-/**
- * Assembles the full system prompt from all 4 layers.
- * Total budget: ~1000-1600 tokens depending on active layers.
- */
+/** Assemble the full system prompt from all 4 layers */
 export function assembleSystemPrompt(input: AssemblerInput): string {
   const layers = [
     CORE_PROMPT,

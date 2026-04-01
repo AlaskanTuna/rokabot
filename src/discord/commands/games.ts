@@ -1,4 +1,4 @@
-/** Slash command definitions for game features (gacha, hangman, etc.). */
+/** Slash command definitions for game features */
 
 import { SlashCommandBuilder } from 'discord.js'
 

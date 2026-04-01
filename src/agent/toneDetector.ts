@@ -1,25 +1,7 @@
 import type { ToneKey } from './prompts/tones.js'
 import type { WindowMessage } from '../session/types.js'
 
-/**
- * Rule-based tone detection. Scans recent messages for keyword patterns
- * to select the appropriate Layer 2 prompt variant.
- * Zero LLM cost — purely pattern matching.
- *
- * Detection priority (most specific first):
- * 1. flustered — romantic keywords
- * 2. tender — soft vulnerability
- * 3. annoyed — defiance/recklessness
- * 4. sleepy — drowsy/tired (also has late-night time trigger)
- * 5. sincere — heavy emotional
- * 6. nostalgic — wistful memories
- * 7. domestic — food/daily life
- * 8. mischievous — scheming/pranks
- * 9. competitive — games/rivalry
- * 10. curious — questions/learning
- * 11. confident — help/advice/trust
- * 12. playful — default fallback
- */
+/** Rule-based tone detection via keyword pattern matching */
 
 interface ToneRule {
   tone: ToneKey
@@ -254,11 +236,10 @@ const TONE_PATTERNS: ToneRule[] = [
   }
 ]
 
-/**
- * Scan the last 3 messages for keyword patterns and return the best-matching tone.
+/** Scan the last 3 messages for keyword patterns and return the best-matching tone
  * @param messages - Recent conversation messages
- * @param hour - Optional current hour (0-23) for time-based tone triggers
- * @returns Matched tone key, or 'playful' as the default fallback
+ * @param hour - Current hour (0-23) for time-based tone triggers
+ * @returns Matched tone key, or 'playful' as default
  */
 export function detectTone(messages: WindowMessage[], hour?: number): ToneKey {
   const recentMessages = messages.slice(-3)
@@ -267,7 +248,7 @@ export function detectTone(messages: WindowMessage[], hour?: number): ToneKey {
   for (const { tone, patterns, minMatches } of TONE_PATTERNS) {
     const matchCount = patterns.filter((p) => p.test(text)).length
 
-    // Special case: sleepy triggers with only 1 match during late night hours (22:00-04:00)
+    // Sleepy triggers with 1 match during late night (22:00-04:00)
     if (tone === 'sleepy' && matchCount >= 1 && matchCount < minMatches && hour !== undefined) {
       const isLateNight = hour >= 22 || hour <= 4
       if (isLateNight) return 'sleepy'

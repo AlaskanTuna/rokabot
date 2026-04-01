@@ -2,7 +2,7 @@ import { ActivityType, type Client } from 'discord.js'
 import { config } from '../config.js'
 import { logger } from '../utils/logger.js'
 
-/** Get the current hour (0-23) in the configured timezone. */
+/** Get the current hour (0-23) in the configured timezone */
 function getLocalHour(): number {
   const tz = config.timezone
   if (!tz) return new Date().getHours()
@@ -14,7 +14,7 @@ function getLocalHour(): number {
   }
 }
 
-/** Status messages mapped to time-of-day ranges. */
+/** Status messages mapped to time-of-day ranges */
 const STATUS_SCHEDULE: Array<{ hours: [number, number]; statuses: string[] }> = [
   {
     hours: [5, 9],
@@ -74,7 +74,7 @@ const STATUS_SCHEDULE: Array<{ hours: [number, number]; statuses: string[] }> = 
   }
 ]
 
-/** Pick a random status for the current time of day. */
+/** Pick a random status for the current time of day */
 function getStatusForHour(hour: number): string {
   for (const entry of STATUS_SCHEDULE) {
     const [start, end] = entry.hours
@@ -83,7 +83,6 @@ function getStatusForHour(hour: number): string {
         return entry.statuses[Math.floor(Math.random() * entry.statuses.length)]
       }
     } else {
-      // Wraps around midnight (e.g., 23-5)
       if (hour >= start || hour < end) {
         return entry.statuses[Math.floor(Math.random() * entry.statuses.length)]
       }
@@ -94,7 +93,7 @@ function getStatusForHour(hour: number): string {
 
 let intervalId: ReturnType<typeof setInterval> | null = null
 
-/** Start cycling the bot's status every 15 minutes based on time of day. */
+/** Start cycling the bot's status based on time of day */
 export function startStatusCycler(client: Client): void {
   function updateStatus() {
     if (!client.user) return
@@ -114,7 +113,7 @@ export function startStatusCycler(client: Client): void {
   logger.info({ intervalMs: config.statusCycleMs }, 'Status cycler started')
 }
 
-/** Stop the status cycler. */
+/** Stop the status cycler */
 export function stopStatusCycler(): void {
   if (intervalId) {
     clearInterval(intervalId)

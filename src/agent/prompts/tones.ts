@@ -1,8 +1,4 @@
-/**
- * Layer 2: Conversation Tone Variants
- * One variant is selected per request based on tone detection.
- * Budget: ~150-250 tokens each
- */
+/** Layer 2: Conversation tone variants selected by tone detection */
 
 export type ToneKey =
   | 'playful'

@@ -1,4 +1,4 @@
-// Suppress verbose ADK console output when ADK_QUIET is set (must run before any imports)
+// Suppress ADK console output before imports
 if (process.env.ADK_QUIET) {
   const originalInfo = console.info
   const originalLog = console.log
@@ -29,29 +29,18 @@ import { stopStatusCycler } from './discord/statusCycler.js'
 
 const client = createClient()
 
-// Start the reminder scheduler once Discord is ready
 client.once('clientReady', () => {
-  // Ensure SQLite is initialized before scheduler queries it
   getDb()
   startReminderScheduler(client)
 
-  // Prune old session history on startup
   pruneOldHistory()
-
-  // Prune stale user memory facts on startup
   pruneOldFacts(config.memory.factRetentionDays)
 
-  // Schedule hourly pruning for session history
   setInterval(() => pruneOldHistory(), 60 * 60 * 1000)
-
-  // Schedule daily pruning for stale user memory facts
   setInterval(() => pruneOldFacts(config.memory.factRetentionDays), 24 * 60 * 60 * 1000)
-
-  // Schedule hourly cleanup for expired channel monitors
   setInterval(() => cleanupExpired(), 60 * 60 * 1000)
 })
 
-// Lightweight health check server for monitoring
 const healthServer = http.createServer((_, res) => {
   const healthy = client.isReady()
   res.writeHead(healthy ? 200 : 503, { 'Content-Type': 'application/json' })
@@ -66,7 +55,7 @@ const healthServer = http.createServer((_, res) => {
 })
 healthServer.listen(3000, '0.0.0.0')
 
-/** Tear down ADK sessions and disconnect Discord before exiting. */
+/** Tear down ADK sessions and disconnect Discord before exiting */
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'Shutdown signal received')
 
@@ -79,7 +68,6 @@ async function shutdown(signal: string): Promise<void> {
 
   logger.info('Roka is going to sleep. Oyasumi~')
 
-  // Force-exit safety net if graceful shutdown stalls
   const timeout = setTimeout(() => {
     logger.warn('Graceful shutdown timed out, forcing exit')
     process.exit(1)

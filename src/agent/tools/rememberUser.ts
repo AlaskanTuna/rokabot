@@ -1,7 +1,4 @@
-/**
- * ADK FunctionTool: remember_user
- * Allows Roka to store a fact about a user for future reference.
- */
+/** Store a fact about a user for future reference */
 
 import { saveFact, countFacts } from '../../storage/userMemory.js'
 
@@ -17,7 +14,7 @@ export interface RememberUserResult {
   totalFacts: number
 }
 
-/** Save a fact about a user. Capped at 10 facts per user; oldest is evicted when full. */
+/** Save a fact about a user, evicting the oldest when capped */
 export function rememberUser(params: RememberUserParams): RememberUserResult {
   const { user_id, fact_key, fact_value } = params
   saveFact(user_id, fact_key, fact_value)

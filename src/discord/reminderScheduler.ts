@@ -1,8 +1,4 @@
-/**
- * Periodic scheduler that checks for due reminders and delivers them
- * as in-character Discord messages in the original channel.
- * Falls back to DM if the channel is not accessible.
- */
+/** Periodic scheduler that delivers due reminders to Discord channels */
 
 import type { Client } from 'discord.js'
 import { config } from '../config.js'
@@ -24,7 +20,6 @@ export function startReminderScheduler(client: Client): void {
           markDelivered(reminder.id)
           logger.info({ reminderId: reminder.id, userId: reminder.userId }, 'Reminder delivered')
         } else {
-          // Channel not accessible — try DM fallback
           try {
             const user = await client.users.fetch(reminder.userId)
             await user.send(
@@ -41,8 +36,6 @@ export function startReminderScheduler(client: Client): void {
           }
         }
       } catch (error) {
-        // Channel fetch/send failed (e.g., 403 Missing Access in uninvited servers)
-        // Try DM fallback before giving up
         logger.warn({ reminderId: reminder.id, error }, 'Channel delivery failed, attempting DM fallback')
         try {
           const user = await client.users.fetch(reminder.userId)

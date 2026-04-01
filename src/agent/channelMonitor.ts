@@ -1,8 +1,4 @@
-/**
- * Active channel monitor — tracks which channels are actively monitored for
- * passive memory extraction. Channels are marked active on @mention and
- * expire after 24 hours of no interaction.
- */
+/** Tracks channels monitored for passive memory extraction with 24h TTL */
 
 import { config } from '../config.js'
 import { logger } from '../utils/logger.js'
@@ -47,7 +43,7 @@ export function getMonitoredCount(): number {
   return monitoredChannels.size
 }
 
-/** Reset — for testing. */
+/** Reset for testing */
 export function resetMonitor(): void {
   monitoredChannels.clear()
 }

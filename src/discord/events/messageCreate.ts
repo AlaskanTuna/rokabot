@@ -12,7 +12,6 @@ import { markActive, isMonitored } from '../../agent/channelMonitor.js'
 import { addMessage as addToPassiveBuffer } from '../../agent/passiveBuffer.js'
 import { maybeExtractFromBuffer, EXTRACTION_INTERVAL } from '../../agent/memoryExtractor.js'
 
-// Discord Components V2 type discriminants
 const TEXT_DISPLAY = 10
 const SECTION = 9
 const CONTAINER = 17
@@ -24,10 +23,7 @@ interface RawComponent {
   label?: string
 }
 
-/**
- * Recursively extract text content from Discord message components.
- * Handles Components V2 (Container, Section, TextDisplay) and standard ActionRow buttons.
- */
+/** Recursively extract text content from Discord message components */
 function extractComponentTexts(components: Message['components']): string[] {
   const texts: string[] = []
 
@@ -39,25 +35,22 @@ function extractComponentTexts(components: Message['components']): string[] {
       if (item.type === CONTAINER || item.type === SECTION) {
         if (item.components) walk(item.components)
       }
-      // Standard ActionRow button labels
       if (item.label) {
         texts.push(item.label)
       }
-      // Recurse into any nested components
       if (item.components && item.type !== CONTAINER && item.type !== SECTION) {
         walk(item.components)
       }
     }
   }
 
-  // Convert to raw JSON to avoid type conflicts between V1 and V2 component types
   const raw = components.map((c) => c.toJSON()) as unknown as RawComponent[]
   walk(raw)
 
   return texts
 }
 
-/** Create a handler for mention/reply message triggers that invokes the Roka agent. */
+/** Create a handler for mention/reply message triggers */
 export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
   return async function handleMessageCreate(message: Message): Promise<void> {
     if (message.author.bot) return
@@ -65,22 +58,19 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
 
     const isMentioned = message.mentions.has(client.user.id)
 
-    // Fetch the referenced message if this is a reply
     const referencedMessage = message.reference?.messageId
       ? await message.channel.messages.fetch(message.reference.messageId).catch(() => null)
       : null
 
     const isReplyToBot = referencedMessage?.author?.id === client.user.id
 
-    // Passive emoji reactions (all guild messages, not just mentions)
     if (message.guild) {
       const emoji = shouldReact(message.content, message.channelId)
       if (emoji) {
-        message.react(emoji).catch(() => {}) // fire-and-forget, don't block
+        message.react(emoji).catch(() => {})
       }
     }
 
-    // Passive message monitoring — buffer messages in actively monitored channels
     if (message.guild && !message.author.bot && isMonitored(message.channelId)) {
       const msgContent = message.content.replace(/<@!?\d+>/g, '').trim()
       if (msgContent) {
@@ -111,7 +101,6 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
       .map((a) => ({ url: a.url, contentType: a.contentType! }))
       .slice(0, MAX_IMAGE_ATTACHMENTS)
 
-    // Include referenced message content as context so Roka can see what the user is replying to
     if (referencedMessage) {
       const refAuthor = referencedMessage.member?.displayName ?? referencedMessage.author.displayName
       const refContent = referencedMessage.content?.trim()
@@ -119,7 +108,6 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
       const refParts: string[] = []
       if (refContent) refParts.push(refContent)
 
-      // Pull text from embeds (link previews, social cards, bot embeds, etc.)
       for (const embed of referencedMessage.embeds) {
         const embedParts: string[] = []
         if (embed.author?.name) embedParts.push(`Author: ${embed.author.name}`)
@@ -134,7 +122,6 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
         }
       }
 
-      // Extract poll question and options
       if (referencedMessage.poll) {
         const poll = referencedMessage.poll
         const pollParts: string[] = []
@@ -149,22 +136,18 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
         }
       }
 
-      // Extract forwarded message content (plain text, components, embeds, attachments)
       if (referencedMessage.messageSnapshots.size > 0) {
         for (const snapshot of referencedMessage.messageSnapshots.values()) {
           const fwdParts: string[] = []
 
-          // Plain text content
           const fwdContent = snapshot.content?.trim()
           if (fwdContent) fwdParts.push(fwdContent)
 
-          // Components V2 text (forwarded container messages)
           if (snapshot.components && snapshot.components.length > 0) {
             const compTexts = extractComponentTexts(snapshot.components)
             if (compTexts.length > 0) fwdParts.push(compTexts.join(' | '))
           }
 
-          // Embeds in forwarded message
           if (snapshot.embeds && snapshot.embeds.length > 0) {
             for (const embed of snapshot.embeds) {
               const eParts: string[] = []
@@ -174,7 +157,6 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
             }
           }
 
-          // Forwarded image attachments
           if (snapshot.attachments && snapshot.attachments.size > 0) {
             const fwdImages = snapshot.attachments
               .filter((a) => a.contentType !== null && ALLOWED_IMAGE_TYPES.has(a.contentType))
@@ -190,7 +172,6 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
         }
       }
 
-      // Pull text from Components V2 containers (other bots using container messages)
       if (referencedMessage.components.length > 0) {
         const componentTexts = extractComponentTexts(referencedMessage.components)
         if (componentTexts.length > 0) {

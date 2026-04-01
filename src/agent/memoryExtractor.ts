@@ -1,9 +1,4 @@
-/**
- * Background memory extraction — passively extracts user facts from conversations.
- * When the passive buffer reaches the configured threshold in a monitored channel,
- * snapshots the buffer and fires a background Gemini call to extract personal facts.
- * Non-blocking: runs as a detached promise, never interrupts the live conversation.
- */
+/** Background memory extraction from passive conversation buffers */
 
 import { GoogleGenAI } from '@google/genai'
 import { config } from '../config.js'
@@ -14,10 +9,7 @@ import { getMessages, clearBuffer, type BufferedMessage } from './passiveBuffer.
 const EXTRACTION_INTERVAL = config.memory.extractionInterval
 const MIN_RPM_HEADROOM = 3
 
-// Simple self-rate-limit: track last extraction time
 let lastExtractionTime = 0
-
-// Lazy-init Gemini client
 let genaiClient: GoogleGenAI | null = null
 
 function getClient(): GoogleGenAI {
@@ -53,15 +45,11 @@ interface ExtractedFact {
   value: string
 }
 
-/**
- * Called when the passive buffer reaches capacity.
- * Checks rate limits and fires background extraction from the passive buffer.
- */
+/** Trigger background extraction when the passive buffer reaches capacity */
 export function maybeExtractFromBuffer(channelId: string): void {
   const messages = getMessages(channelId)
-  if (messages.length < config.memory.extractionInterval) return // Not enough context
+  if (messages.length < config.memory.extractionInterval) return
 
-  // Self-rate-limit
   const now = Date.now()
   if (now - lastExtractionTime < config.memory.extractionGapMs) {
     logger.debug({ channelId }, 'Memory extraction skipped (too recent)')
@@ -71,25 +59,21 @@ export function maybeExtractFromBuffer(channelId: string): void {
 
   logger.info({ channelId, messageCount: messages.length }, 'Passive buffer full, triggering memory extraction')
 
-  // Clear buffer immediately so new messages start a fresh batch
   clearBuffer(channelId)
 
-  // Fire and forget
   void runBufferExtraction(channelId, messages).catch((error) => {
     logger.warn({ channelId, error }, 'Passive buffer memory extraction failed')
   })
 }
 
-/** Run extraction from the passive buffer messages. */
+/** Run extraction from the passive buffer messages */
 async function runBufferExtraction(channelId: string, messages: BufferedMessage[]): Promise<void> {
-  // Format only user messages for extraction
   const conversationText = messages.map((m) => `[${m.displayName}]: ${m.content}`).join('\n')
 
   if (!conversationText.trim()) return
 
   const prompt = EXTRACTION_PROMPT + conversationText
 
-  // Build userMap from the messages directly
   const userMap = new Map<string, string>()
   for (const m of messages) {
     userMap.set(m.displayName, m.userId)
@@ -118,7 +102,6 @@ async function runBufferExtraction(channelId: string, messages: BufferedMessage[
 
     let savedCount = 0
     for (const fact of facts) {
-      // The extraction prompt uses displayName — resolve to Discord user ID
       const resolvedUserId = userMap.get(fact.userId) ?? fact.userId
       const existingFacts = getFacts(resolvedUserId)
       const alreadyExists = existingFacts.some((f) => f.key === fact.key && f.value === fact.value)
@@ -139,10 +122,9 @@ async function runBufferExtraction(channelId: string, messages: BufferedMessage[
   }
 }
 
-/** Parse the JSON array from the LLM response, handling common formatting issues. */
+/** Parse the JSON array from the LLM response */
 function parseFacts(text: string): ExtractedFact[] {
   try {
-    // Strip markdown code fences if present
     let cleaned = text.replace(/^```json?\n?/i, '').replace(/\n?```$/i, '')
     cleaned = cleaned.trim()
 
@@ -167,10 +149,10 @@ function parseFacts(text: string): ExtractedFact[] {
   }
 }
 
-/** Reset state — for testing. */
+/** Reset state for testing */
 export function resetCounters(): void {
   lastExtractionTime = 0
 }
 
-/** Exposed for testing. */
+/** Exposed for testing */
 export { parseFacts as _parseFacts, EXTRACTION_INTERVAL }

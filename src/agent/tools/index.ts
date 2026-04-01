@@ -1,7 +1,4 @@
-/**
- * ADK FunctionTool definitions for the Roka agent.
- * Each tool wraps a pure function with a Zod schema for parameter validation.
- */
+/** ADK FunctionTool definitions for the Roka agent */
 
 import { FunctionTool } from '@google/adk'
 import { z } from 'zod'
@@ -237,7 +234,7 @@ export const cancelReminderTool = new FunctionTool({
   }
 })
 
-/** All tool instances registered with the Roka LlmAgent. */
+/** All tool instances registered with the Roka LlmAgent */
 export const rokaTools = [
   rollDiceTool,
   flipCoinTool,

@@ -1,6 +1,4 @@
-/**
- * ADK FunctionTools for reminders: set, list, cancel.
- */
+/** Reminder tools: set, list, cancel */
 
 import { createReminder, getActiveReminders, getReminderById, deleteReminder } from '../../storage/reminderStore.js'
 import { config } from '../../config.js'
@@ -12,7 +10,7 @@ export interface SetReminderParams {
   delay_minutes: number
 }
 
-/** Get the UTC offset label for the configured timezone. */
+/** Get the UTC offset label for the configured timezone */
 function getTimezoneLabel(): string {
   const tz = config.timezone
   if (!tz) return 'UTC'
@@ -26,7 +24,7 @@ function getTimezoneLabel(): string {
   }
 }
 
-/** Format a timestamp as a readable time string in the configured timezone. */
+/** Format a timestamp as a readable time string in the configured timezone */
 function formatTime(timestamp: number): string {
   const tz = config.timezone ?? undefined
   try {
@@ -42,7 +40,7 @@ function formatTime(timestamp: number): string {
   }
 }
 
-/** Validate and create a reminder for a user. */
+/** Validate and create a reminder for a user */
 export function setReminder(params: SetReminderParams) {
   const { user_id, channel_id, reminder, delay_minutes } = params
 
@@ -66,7 +64,7 @@ export function setReminder(params: SetReminderParams) {
   }
 }
 
-/** List active reminders for a user. */
+/** List active reminders for a user */
 export function listReminders(params: { user_id: string }) {
   const reminders = getActiveReminders(params.user_id)
 
@@ -87,7 +85,7 @@ export function listReminders(params: { user_id: string }) {
   }
 }
 
-/** Cancel a reminder by ID (only if it belongs to the user). */
+/** Cancel a reminder by ID if it belongs to the user */
 export function cancelReminder(params: { user_id: string; reminder_id: number }) {
   const reminder = getReminderById(params.reminder_id)
 

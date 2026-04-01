@@ -1,8 +1,4 @@
-/**
- * Layer 1: Speech Patterns
- * Always included. Defines Roka's verbal style, sentence rhythm, and dialogue flavor.
- * Budget: ~300-500 tokens
- */
+/** Layer 1: Speech patterns, verbal style, and dialogue flavor */
 export const SPEECH_PROMPT = `## Speech Patterns
 
 ### Verbal Style

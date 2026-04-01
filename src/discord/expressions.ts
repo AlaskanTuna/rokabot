@@ -1,11 +1,7 @@
 import type { ToneKey } from '../agent/prompts/tones.js'
 import { logger } from '../utils/logger.js'
 
-/**
- * Tone-to-expression mapping.
- * Each tone maps to an array of expression names (without the roka_a_ prefix).
- * A random expression is selected from the pool for each message.
- */
+/** Tone-to-expression mapping for character portraits */
 const TONE_EXPRESSIONS: Record<ToneKey, string[]> = {
   playful: ['smile', 'cheerful'],
   sincere: ['sad', 'pained', 'sorrowful'],
@@ -21,10 +17,6 @@ const TONE_EXPRESSIONS: Record<ToneKey, string[]> = {
   competitive: ['frustrated', 'dissatisfied_3', 'uncertain']
 }
 
-/**
- * Static expression URL map.
- * Each key is an expression name, value is a public URL (e.g. catbox).
- */
 const EXPRESSION_URLS: Record<string, string> = {
   anxious: 'https://files.catbox.moe/29f0py.png',
   attentive: 'https://files.catbox.moe/v52lqw.png',
@@ -61,10 +53,7 @@ const EXPRESSION_URLS: Record<string, string> = {
   worried: 'https://files.catbox.moe/q2gnq6.png'
 }
 
-/**
- * Get the expression URL for a given tone.
- * Randomly selects from the tone's expression pool.
- */
+/** Get a random expression URL for the given tone */
 export function getExpressionUrl(tone: ToneKey): string {
   const pool = TONE_EXPRESSIONS[tone]
   if (!pool || pool.length === 0) {
