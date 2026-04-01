@@ -108,7 +108,10 @@ async function runBufferExtraction(channelId: string, messages: BufferedMessage[
     if (!text) return
 
     const facts = parseFacts(text)
-    if (facts.length === 0) return
+    if (facts.length === 0) {
+      logger.info({ channelId }, 'Memory extraction complete — no facts found')
+      return
+    }
 
     let savedCount = 0
     for (const fact of facts) {
