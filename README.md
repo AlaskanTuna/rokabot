@@ -29,7 +29,7 @@ Rokabot responds to `/chat` slash commands, @mentions, and replies with in-chara
 - **10 agent tools** -- dice, coin, clock, anime search, schedule, weather, web search, user memory, reminders
 - **3 mini-games** -- `/shiritori`, `/gacha` (buddy pets), `/hangman` with leaderboards and guides
 - **Buddy pet system** -- hatch a deterministic VN companion spirit (18 species, 5 rarity tiers, 5 stats)
-- **Per-user memory** -- remembers nicknames, favorites, and personal details across sessions via background extraction every 10 messages
+- **Per-user memory** -- passively monitors active channels and extracts user facts every 20 messages with 90-day retention
 - **Reminders** -- set via conversation or `/remind` command, with timezone-aware scheduling and DM fallback
 - **SQLite persistence** -- sessions, memory, reminders, and game scores survive restarts
 - **Session history auto-pruning** -- hourly cleanup of history older than 7 days
@@ -220,40 +220,46 @@ All 33 character expressions are assigned uniquely across tones — no expressio
 <details>
 <summary><strong>Per-User Relationship Memory</strong></summary>
 
-Roka remembers facts about individual users across sessions. Facts are extracted passively via a background process and also available through explicit ADK tools.
+Roka passively learns about users by monitoring conversations in active channels. Facts are extracted via a background Gemini call and also available through explicit ADK tools.
 
 ```mermaid
 flowchart TD
-    User([User sends message]) --> Counter["Message counter\n(per channel)"]
-    Counter --> Check{"Every 10th\nmessage?"}
-    Check -->|No| Fetch
-    Check -->|Yes| Extract["Background Gemini call\n(separate from conversation)"]
+    Msg([Guild message]) --> Monitored{"Channel\nmonitored?"}
+    Monitored -->|No| Skip1([Ignore])
+    Monitored -->|Yes| Buffer["Add to passive buffer\n(20-message ring buffer)"]
+    Buffer --> Full{"Buffer\nfull?"}
+    Full -->|No| Wait([Wait for more])
+    Full -->|Yes| Extract["Background Gemini call\n(separate from conversation)"]
     Extract --> Parse["Parse JSON facts\nfor ALL users in window"]
-    Parse --> Save["Save new facts\nto SQLite"]
-    Fetch["Fetch user facts\nfrom SQLite"] --> Inject{"Facts exist?"}
-    Inject -->|Yes| Append["Append to system prompt:\n'You remember about Alice:\nshe prefers Ali, likes Frieren...'"]
-    Inject -->|No| Skip["No injection"]
-    Append --> LLM["Send to Gemini\n(Roka has context)"]
-    Skip --> LLM
+    Parse --> Dedup{"Fact already\nexists?"}
+    Dedup -->|Yes| Skip2([Skip])
+    Dedup -->|No| Save["Save to SQLite"]
+
+    Mention(["@mention Roka"]) --> Activate["Mark channel\nas monitored (24h)"]
+    Activate --> Fetch["Fetch user facts\nfrom SQLite"]
+    Fetch --> Inject{"Facts exist?"}
+    Inject -->|Yes| Append["Append to prompt +\nrefresh timestamps"]
+    Inject -->|No| LLM
+    Append --> LLM["Send to Gemini"]
 ```
 
 **How it works:**
 
-- **Background extraction**: Every 10 messages in a channel, the conversation window is sent to a separate Gemini call (not through the ADK session) with a focused extraction prompt. This extracts facts for ALL users in the window — not just the current speaker.
-- **Prompt injection**: When a user speaks, their stored facts are fetched from SQLite and appended to the system prompt (~50-100 tokens). Roka "just knows" these things.
-- **Explicit tools**: `remember_user` and `recall_user` ADK tools are still available for direct @mention requests like "remember that my birthday is March 15" or "what do you know about me."
-- **User ID auto-injection**: Discord user IDs are resolved automatically — the LLM never needs to know them.
-- Facts are capped at 10 per user. When a new fact exceeds the cap, the oldest is evicted.
-- Facts persist across bot restarts via SQLite.
+- **Active channel monitoring**: Channels where Roka has been @mentioned in the last 24h are "monitored." All non-bot messages in monitored channels flow into a passive in-memory buffer — no SQLite writes, no LLM calls.
+- **Background extraction**: When the passive buffer reaches 20 messages, it fires a background Gemini call with a focused extraction prompt. This extracts facts for ALL users in the window — not just the current speaker.
+- **Prompt injection**: When a user @mentions Roka, their stored facts are fetched and appended to the system prompt (~50-100 tokens). Timestamps are refreshed on access so active facts don't expire.
+- **Explicit tools**: `remember_user` and `recall_user` ADK tools are still available for direct requests.
+- **Retention**: Facts are capped at 10 per user (oldest evicted). Facts older than 90 days without access are auto-pruned daily. Refresh-on-access keeps active facts alive.
 
-| Aspect             | Detail                                                                              |
-| ------------------ | ----------------------------------------------------------------------------------- |
-| Storage            | SQLite `user_memory` table (user_id, fact_key, fact_value, updated_at)              |
-| Cap                | 10 facts per user, oldest evicted on overflow                                       |
-| Passive extraction | Every 10 messages, background Gemini call (~1 extra RPM per 10 msgs)                |
-| Prompt injection   | Appended to system prompt at request time, ~50-100 tokens                           |
-| Explicit tools     | `remember_user` (save), `recall_user` (recall), `list_reminders`, `cancel_reminder` |
-| Deduplication      | Skips saving if identical key+value already exists                                  |
+| Aspect             | Detail                                                                 |
+| ------------------ | ---------------------------------------------------------------------- |
+| Storage            | SQLite `user_memory` table (user_id, fact_key, fact_value, updated_at) |
+| Cap                | 10 facts per user, oldest evicted on overflow                          |
+| Passive monitoring | 20-message ring buffer in monitored channels (in-memory only)          |
+| Extraction trigger | Every 20 messages, background Gemini call (~1 extra RPM per 20 msgs)   |
+| Channel monitoring | Auto-activated on @mention, expires after 24h of no interaction        |
+| Fact retention     | 90-day TTL with refresh-on-access; daily pruning job                   |
+| Deduplication      | Skips saving if identical key+value already exists                     |
 
 </details>
 
@@ -369,7 +375,9 @@ rokabot/
 │   │   ├── roka.ts                    # ADK LlmAgent + Runner, session management, SQLite integration
 │   │   ├── toneDetector.ts            # Rule-based tone detection (keyword matching, 12 tones)
 │   │   ├── promptAssembler.ts         # 4-layer prompt combiner
-│   │   ├── memoryExtractor.ts        # Background fact extraction (every 10 messages)
+│   │   ├── memoryExtractor.ts        # Background fact extraction from passive buffer
+│   │   ├── passiveBuffer.ts          # 20-message in-memory ring buffer per channel
+│   │   ├── channelMonitor.ts         # Active channel tracking (24h TTL)
 │   │   ├── prompts/
 │   │   │   ├── core.ts                # Layer 0: Core identity, personality, abilities
 │   │   │   ├── speech.ts              # Layer 1: Speech patterns & formatting rules
