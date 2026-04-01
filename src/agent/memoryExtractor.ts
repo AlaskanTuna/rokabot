@@ -1,7 +1,7 @@
 /**
  * Background memory extraction — passively extracts user facts from conversations.
- * Every 10 messages in a channel, snapshots the conversation window and fires a
- * background Gemini call to extract personal facts for all users in the window.
+ * When the passive buffer reaches 20 messages in a monitored channel, snapshots the
+ * buffer and fires a background Gemini call to extract personal facts for all users.
  * Non-blocking: runs as a detached promise, never interrupts the live conversation.
  */
 
@@ -9,14 +9,10 @@ import { GoogleGenAI } from '@google/genai'
 import { config } from '../config.js'
 import { logger } from '../utils/logger.js'
 import { saveFact, getFacts } from '../storage/userMemory.js'
-import { loadHistory } from '../storage/sessionStore.js'
+import { getMessages, clearBuffer, type BufferedMessage } from './passiveBuffer.js'
 
-const EXTRACTION_INTERVAL = 10
+const EXTRACTION_INTERVAL = 20
 const MIN_RPM_HEADROOM = 3
-
-// Per-channel message counters and user ID mappings
-const messageCounters = new Map<string, number>()
-const channelUserMappings = new Map<string, Map<string, string>>() // channelId → (displayName → userId)
 
 // Simple self-rate-limit: track last extraction time
 let lastExtractionTime = 0
@@ -55,52 +51,41 @@ interface ExtractedFact {
 }
 
 /**
- * Called after each successful message exchange. Increments the per-channel counter
- * and triggers background extraction at every Nth message.
+ * Called when the passive buffer reaches capacity.
+ * Checks rate limits and fires background extraction from the passive buffer.
  */
-export function maybeExtractMemory(channelId: string, userId: string, displayName: string, userMessage: string): void {
-  // Track displayName → userId mapping for this channel
-  if (!channelUserMappings.has(channelId)) {
-    channelUserMappings.set(channelId, new Map())
-  }
-  channelUserMappings.get(channelId)!.set(displayName, userId)
+export function maybeExtractFromBuffer(channelId: string): void {
+  const messages = getMessages(channelId)
+  if (messages.length < 10) return // Not enough context
 
-  const count = (messageCounters.get(channelId) ?? 0) + 1
-  messageCounters.set(channelId, count)
-
-  if (count < EXTRACTION_INTERVAL) return
-
-  // Reset counter
-  messageCounters.set(channelId, 0)
-
-  // Self-rate-limit: don't extract too frequently
+  // Self-rate-limit
   const now = Date.now()
-  if (now - lastExtractionTime < MIN_EXTRACTION_GAP_MS) {
-    logger.debug({ channelId }, 'Memory extraction skipped (too recent)')
-    return
-  }
+  if (now - lastExtractionTime < MIN_EXTRACTION_GAP_MS) return
   lastExtractionTime = now
 
-  // Fire and forget — never block the response
-  void runExtraction(channelId).catch((error) => {
-    logger.warn({ channelId, error }, 'Background memory extraction failed')
+  // Clear buffer immediately so new messages start a fresh batch
+  clearBuffer(channelId)
+
+  // Fire and forget
+  void runBufferExtraction(channelId, messages).catch((error) => {
+    logger.warn({ channelId, error }, 'Passive buffer memory extraction failed')
   })
 }
 
-/** Run the actual extraction: load history, call Gemini, save facts. */
-async function runExtraction(channelId: string): Promise<void> {
-  const history = loadHistory(channelId, EXTRACTION_INTERVAL)
-  if (history.length < 3) return // Not enough context
-
-  // Format messages for extraction — use displayName since that's what session_history stores
-  const conversationText = history
-    .filter((m) => m.role === 'user')
-    .map((m) => `[${m.displayName}]: ${m.content}`)
-    .join('\n')
+/** Run extraction from the passive buffer messages. */
+async function runBufferExtraction(channelId: string, messages: BufferedMessage[]): Promise<void> {
+  // Format only user messages for extraction
+  const conversationText = messages.map((m) => `[${m.displayName}]: ${m.content}`).join('\n')
 
   if (!conversationText.trim()) return
 
   const prompt = EXTRACTION_PROMPT + conversationText
+
+  // Build userMap from the messages directly
+  const userMap = new Map<string, string>()
+  for (const m of messages) {
+    userMap.set(m.displayName, m.userId)
+  }
 
   try {
     const client = getClient()
@@ -120,9 +105,6 @@ async function runExtraction(channelId: string): Promise<void> {
     const facts = parseFacts(text)
     if (facts.length === 0) return
 
-    // Resolve displayName → Discord userId using the channel mapping
-    const userMap = channelUserMappings.get(channelId) ?? new Map()
-
     let savedCount = 0
     for (const fact of facts) {
       // The extraction prompt uses displayName — resolve to Discord user ID
@@ -136,7 +118,10 @@ async function runExtraction(channelId: string): Promise<void> {
     }
 
     if (savedCount > 0) {
-      logger.info({ channelId, extracted: facts.length, saved: savedCount }, 'Background memory extraction complete')
+      logger.info(
+        { channelId, extracted: facts.length, saved: savedCount },
+        'Passive buffer memory extraction complete'
+      )
     }
   } catch (error) {
     logger.warn({ channelId, error }, 'Memory extraction Gemini call failed')
@@ -171,9 +156,8 @@ function parseFacts(text: string): ExtractedFact[] {
   }
 }
 
-/** Reset counters — for testing. */
+/** Reset state — for testing. */
 export function resetCounters(): void {
-  messageCounters.clear()
   lastExtractionTime = 0
 }
 

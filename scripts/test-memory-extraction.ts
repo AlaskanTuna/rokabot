@@ -1,6 +1,6 @@
 /**
  * Memory Extraction Integration Test — validates the background fact extraction pipeline.
- * Tests: parsing, counter logic, fact deduplication, and (optionally) live Gemini extraction.
+ * Tests: parsing, passive buffer, channel monitor, fact retention, and (optionally) live Gemini extraction.
  *
  * Usage:
  *   npm run test:memory
@@ -14,14 +14,17 @@ process.env.DISCORD_TOKEN ||= 'test-stub'
 process.env.DISCORD_CLIENT_ID ||= 'test-stub'
 
 import { getDb, closeDb } from '../src/storage/database.js'
-import { saveFact, getFacts, countFacts } from '../src/storage/userMemory.js'
+import { saveFact, getFacts, countFacts, refreshFactTimestamps, pruneOldFacts } from '../src/storage/userMemory.js'
 import { saveMessage, loadHistory, clearHistory } from '../src/storage/sessionStore.js'
+import { _parseFacts as parseFacts, EXTRACTION_INTERVAL } from '../src/agent/memoryExtractor.js'
+import { addMessage, getMessages, clearBuffer, getMessageCount, resetAllBuffers } from '../src/agent/passiveBuffer.js'
 import {
-  maybeExtractMemory,
-  resetCounters,
-  _parseFacts as parseFacts,
-  EXTRACTION_INTERVAL
-} from '../src/agent/memoryExtractor.js'
+  markActive,
+  isMonitored,
+  cleanupExpired,
+  getMonitoredCount,
+  resetMonitor
+} from '../src/agent/channelMonitor.js'
 
 // --- Test Harness ---
 
@@ -85,23 +88,91 @@ async function main() {
   const noArray = parseFacts('{"userId":"A","key":"k","value":"v"}')
   assert(noArray.length === 0, 'Parse: non-array JSON', 'Returns []', `Got ${noArray.length}`)
 
-  // ─── Counter Logic ───
-  console.log('\n  --- Counter Logic ---')
+  // ─── Extraction Interval ───
+  console.log('\n  --- Extraction Interval ---')
 
-  resetCounters()
   assert(
-    EXTRACTION_INTERVAL === 10,
-    'Counter: interval',
+    EXTRACTION_INTERVAL === 20,
+    'Interval: updated to 20',
     `Every ${EXTRACTION_INTERVAL} messages`,
     `Got ${EXTRACTION_INTERVAL}`
   )
 
-  // Calling maybeExtractMemory 9 times should NOT trigger extraction
-  // (We can't easily test that extraction didn't fire, but we can test it doesn't crash)
-  for (let i = 0; i < 9; i++) {
-    maybeExtractMemory('test-ch', 'user123', 'Alice', `Message ${i}`)
+  // ─── Passive Buffer ───
+  console.log('\n  --- Passive Buffer ---')
+
+  resetAllBuffers()
+
+  // addMessage and getMessages
+  addMessage('buf-ch', 'user1', 'Alice', 'Hello everyone!')
+  addMessage('buf-ch', 'user2', 'Bob', 'Hey Alice!')
+  const msgs = getMessages('buf-ch')
+  assert(msgs.length === 2, 'Buffer: addMessage/getMessages', `${msgs.length} messages`, `Got ${msgs.length}`)
+  assert(
+    msgs[0].displayName === 'Alice' && msgs[0].userId === 'user1',
+    'Buffer: message fields',
+    `${msgs[0].displayName} (${msgs[0].userId})`,
+    'Wrong fields'
+  )
+
+  // getMessageCount
+  assert(getMessageCount('buf-ch') === 2, 'Buffer: getMessageCount', '2', `Got ${getMessageCount('buf-ch')}`)
+  assert(
+    getMessageCount('nonexistent') === 0,
+    'Buffer: empty channel count',
+    '0',
+    `Got ${getMessageCount('nonexistent')}`
+  )
+
+  // clearBuffer
+  clearBuffer('buf-ch')
+  assert(getMessages('buf-ch').length === 0, 'Buffer: clearBuffer', 'Messages cleared', 'Messages remain')
+
+  // Ring buffer overflow (cap at 20)
+  resetAllBuffers()
+  for (let i = 0; i < 25; i++) {
+    addMessage('overflow-ch', `user${i}`, `User${i}`, `Message ${i}`)
   }
-  pass('Counter: 9 messages', 'No crash, extraction not triggered yet')
+  const overflowMsgs = getMessages('overflow-ch')
+  assert(
+    overflowMsgs.length === 20,
+    'Buffer: ring buffer cap',
+    `${overflowMsgs.length} (capped at 20)`,
+    `Got ${overflowMsgs.length}`
+  )
+  assert(
+    overflowMsgs[0].content === 'Message 5',
+    'Buffer: oldest evicted',
+    `First message: "${overflowMsgs[0].content}"`,
+    `Got "${overflowMsgs[0].content}"`
+  )
+
+  // clearBuffer keeps userMap
+  resetAllBuffers()
+  addMessage('map-ch', 'user1', 'Alice', 'test')
+  clearBuffer('map-ch')
+  addMessage('map-ch', 'user2', 'Bob', 'test2')
+  // After clear + new message, both users should be in userMap
+  const { getUserMap } = await import('../src/agent/passiveBuffer.js')
+  const userMap = getUserMap('map-ch')
+  assert(userMap.has('Alice'), 'Buffer: userMap survives clear', 'Alice in userMap', 'Alice missing')
+  assert(userMap.has('Bob'), 'Buffer: userMap updated after clear', 'Bob in userMap', 'Bob missing')
+
+  // ─── Channel Monitor ───
+  console.log('\n  --- Channel Monitor ---')
+
+  resetMonitor()
+
+  // markActive + isMonitored
+  assert(!isMonitored('mon-ch'), 'Monitor: not monitored initially', 'false', 'true')
+  markActive('mon-ch')
+  assert(isMonitored('mon-ch'), 'Monitor: active after markActive', 'true', 'false')
+  assert(getMonitoredCount() === 1, 'Monitor: count', '1', `Got ${getMonitoredCount()}`)
+
+  // Expiry (simulate by directly manipulating — can't wait 24h in a test)
+  // Just verify cleanupExpired doesn't crash and non-expired channels survive
+  cleanupExpired()
+  assert(isMonitored('mon-ch'), 'Monitor: survives cleanup (not expired)', 'true', 'false')
 
   // ─── Deduplication ───
   console.log('\n  --- Fact Deduplication ---')
@@ -118,6 +189,52 @@ async function main() {
     'Dedup: same key updates value',
     'Updated to Dandadan',
     `Got ${updated.length} facts, value: ${updated[0]?.value}`
+  )
+
+  // ─── refreshFactTimestamps ───
+  console.log('\n  --- Refresh Fact Timestamps ---')
+
+  saveFact('refresh-user', 'hobby', 'cooking')
+  // Manually backdate the timestamp
+  db.prepare('UPDATE user_memory SET updated_at = ? WHERE user_id = ?').run(1000, 'refresh-user')
+  const before = db.prepare('SELECT updated_at FROM user_memory WHERE user_id = ?').get('refresh-user') as {
+    updated_at: number
+  }
+  assert(
+    before.updated_at === 1000,
+    'Refresh: backdated',
+    `updated_at=${before.updated_at}`,
+    `Got ${before.updated_at}`
+  )
+
+  refreshFactTimestamps('refresh-user')
+  const after = db.prepare('SELECT updated_at FROM user_memory WHERE user_id = ?').get('refresh-user') as {
+    updated_at: number
+  }
+  assert(
+    after.updated_at > 1000,
+    'Refresh: timestamp updated',
+    `updated_at=${after.updated_at}`,
+    `Got ${after.updated_at}`
+  )
+
+  // ─── pruneOldFacts ───
+  console.log('\n  --- Prune Old Facts ---')
+
+  saveFact('prune-old', 'old_fact', 'ancient')
+  saveFact('prune-recent', 'new_fact', 'fresh')
+  // Backdate one fact to 100 days ago
+  const hundredDaysAgo = Date.now() - 100 * 24 * 60 * 60 * 1000
+  db.prepare('UPDATE user_memory SET updated_at = ? WHERE user_id = ?').run(hundredDaysAgo, 'prune-old')
+
+  const pruned = pruneOldFacts(90)
+  assert(pruned >= 1, 'Prune: old facts removed', `${pruned} pruned`, `Got ${pruned}`)
+  assert(countFacts('prune-old') === 0, 'Prune: old user has no facts', '0 facts', `Got ${countFacts('prune-old')}`)
+  assert(
+    countFacts('prune-recent') > 0,
+    'Prune: recent user untouched',
+    `${countFacts('prune-recent')} facts`,
+    '0 facts'
   )
 
   // ─── Session History for Extraction ───

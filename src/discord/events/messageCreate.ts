@@ -8,6 +8,9 @@ import { generateResponse, type ImageAttachment } from '../../agent/roka.js'
 import { isChannelBusy, markBusy, markFree } from '../concurrency.js'
 import { shouldReact } from '../emojiReactor.js'
 import { handleGachaMention } from './gachaMention.js'
+import { markActive, isMonitored } from '../../agent/channelMonitor.js'
+import { addMessage as addToPassiveBuffer } from '../../agent/passiveBuffer.js'
+import { maybeExtractFromBuffer } from '../../agent/memoryExtractor.js'
 
 // Discord Components V2 type discriminants
 const TEXT_DISPLAY = 10
@@ -77,9 +80,26 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
       }
     }
 
+    // Passive message monitoring — buffer messages in actively monitored channels
+    if (message.guild && !message.author.bot && isMonitored(message.channelId)) {
+      const msgContent = message.content.replace(/<@!?\d+>/g, '').trim()
+      if (msgContent) {
+        const count = addToPassiveBuffer(
+          message.channelId,
+          message.author.id,
+          message.member?.displayName ?? message.author.displayName,
+          msgContent
+        )
+        if (count >= 20) {
+          maybeExtractFromBuffer(message.channelId)
+        }
+      }
+    }
+
     if (!isMentioned && !isReplyToBot) return
 
     const channelId = message.channelId
+    markActive(channelId)
     const displayName = message.member?.displayName ?? message.author.displayName
 
     let content = message.content.replace(/<@!?\d+>/g, '').trim()

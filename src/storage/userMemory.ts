@@ -5,6 +5,7 @@
  */
 
 import { getDb } from './database.js'
+import { logger } from '../utils/logger.js'
 
 const MAX_FACTS_PER_USER = 10
 
@@ -79,4 +80,27 @@ export function countFacts(userId: string): number {
   const db = getDb()
   const row = db.prepare('SELECT COUNT(*) AS cnt FROM user_memory WHERE user_id = ?').get(userId) as { cnt: number }
   return row.cnt
+}
+
+/**
+ * Touch updated_at for all facts of a user (refresh-on-access).
+ * Keeps frequently-accessed facts from expiring under the TTL pruning.
+ */
+export function refreshFactTimestamps(userId: string): void {
+  const db = getDb()
+  db.prepare('UPDATE user_memory SET updated_at = ? WHERE user_id = ?').run(Date.now(), userId)
+}
+
+/**
+ * Delete facts older than the specified number of days.
+ * Returns the number of pruned rows.
+ */
+export function pruneOldFacts(maxAgeDays: number = 90): number {
+  const db = getDb()
+  const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000
+  const result = db.prepare('DELETE FROM user_memory WHERE updated_at < ?').run(cutoff)
+  if (result.changes > 0) {
+    logger.info({ pruned: result.changes, maxAgeDays }, 'Pruned stale user memory facts')
+  }
+  return result.changes
 }

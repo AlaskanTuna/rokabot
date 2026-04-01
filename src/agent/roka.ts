@@ -16,8 +16,7 @@ import type { WindowMessage } from '../session/types.js'
 import { config } from '../config.js'
 import { rokaTools } from './tools/index.js'
 import { saveMessage, loadHistory } from '../storage/sessionStore.js'
-import { getAllFactsForPrompt } from '../storage/userMemory.js'
-import { maybeExtractMemory } from './memoryExtractor.js'
+import { getAllFactsForPrompt, refreshFactTimestamps } from '../storage/userMemory.js'
 
 export interface ImageAttachment {
   url: string
@@ -332,6 +331,7 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
     const userFacts = getAllFactsForPrompt(userId)
     if (userFacts) {
       systemPrompt += `\n\n## What You Remember About ${displayName}\n- ${userFacts}`
+      refreshFactTimestamps(userId) // Touch timestamps so active facts don't expire
     }
   } catch (error) {
     logger.warn({ userId, error }, 'Failed to load user memory for prompt injection')
@@ -441,9 +441,6 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
         } catch (error) {
           logger.warn({ channelId, error }, 'Failed to persist messages to SQLite')
         }
-
-        // Background memory extraction — non-blocking, fire-and-forget
-        maybeExtractMemory(channelId, userId, displayName, userMessage)
       }
 
       logger.debug({ responseLength: responseText.length }, 'ADK response extracted')

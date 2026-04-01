@@ -21,6 +21,8 @@ import { createClient } from './discord/client.js'
 import { destroyAllSessions } from './agent/roka.js'
 import { closeDb, getDb } from './storage/database.js'
 import { pruneOldHistory } from './storage/sessionStore.js'
+import { pruneOldFacts } from './storage/userMemory.js'
+import { cleanupExpired } from './agent/channelMonitor.js'
 import { startReminderScheduler, stopReminderScheduler } from './discord/reminderScheduler.js'
 import { destroyAllGames as destroyAllShiritoriGames } from './games/shiritori.js'
 import { stopStatusCycler } from './discord/statusCycler.js'
@@ -36,8 +38,17 @@ client.once('clientReady', () => {
   // Prune old session history on startup
   pruneOldHistory()
 
-  // Schedule hourly pruning
+  // Prune stale user memory facts on startup (90-day TTL)
+  pruneOldFacts(90)
+
+  // Schedule hourly pruning for session history
   setInterval(() => pruneOldHistory(), 60 * 60 * 1000)
+
+  // Schedule daily pruning for stale user memory facts
+  setInterval(() => pruneOldFacts(90), 24 * 60 * 60 * 1000)
+
+  // Schedule hourly cleanup for expired channel monitors
+  setInterval(() => cleanupExpired(), 60 * 60 * 1000)
 })
 
 // Lightweight health check server for monitoring

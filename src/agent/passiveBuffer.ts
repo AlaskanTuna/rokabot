@@ -1,0 +1,58 @@
+/**
+ * Passive message ring buffer — stores the last 20 messages per monitored channel.
+ * Used by the background memory extractor to capture facts from regular chat,
+ * not just @mention conversations.
+ */
+
+export interface BufferedMessage {
+  displayName: string
+  userId: string
+  content: string
+  timestamp: number
+}
+
+interface ChannelBuffer {
+  messages: BufferedMessage[]
+  userMap: Map<string, string> // displayName → userId
+}
+
+const BUFFER_SIZE = 20
+const buffers = new Map<string, ChannelBuffer>()
+
+export function addMessage(channelId: string, userId: string, displayName: string, content: string): number {
+  if (!buffers.has(channelId)) {
+    buffers.set(channelId, { messages: [], userMap: new Map() })
+  }
+  const buf = buffers.get(channelId)!
+  buf.userMap.set(displayName, userId)
+  buf.messages.push({ displayName, userId, content, timestamp: Date.now() })
+  if (buf.messages.length > BUFFER_SIZE) {
+    buf.messages.shift()
+  }
+  return buf.messages.length
+}
+
+export function getMessages(channelId: string): BufferedMessage[] {
+  return buffers.get(channelId)?.messages ?? []
+}
+
+export function getUserMap(channelId: string): Map<string, string> {
+  return buffers.get(channelId)?.userMap ?? new Map()
+}
+
+export function clearBuffer(channelId: string): void {
+  const buf = buffers.get(channelId)
+  if (buf) {
+    buf.messages = []
+    // Keep userMap — we still need it for future extractions
+  }
+}
+
+export function getMessageCount(channelId: string): number {
+  return buffers.get(channelId)?.messages.length ?? 0
+}
+
+/** Reset all buffers — for testing. */
+export function resetAllBuffers(): void {
+  buffers.clear()
+}
