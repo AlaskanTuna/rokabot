@@ -439,6 +439,21 @@ function handleRemind(interaction: ChatInputCommandInteraction) {
   }
 }
 
+/** Get the UTC offset label for the configured timezone (e.g., "UTC+8", "UTC-5"). */
+function getTimezoneLabel(): string {
+  const tz = config.timezone
+  if (!tz) return 'UTC'
+  try {
+    const now = new Date()
+    const formatter = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'shortOffset' })
+    const parts = formatter.formatToParts(now)
+    const tzPart = parts.find((p) => p.type === 'timeZoneName')
+    return tzPart?.value ?? tz
+  } catch {
+    return tz
+  }
+}
+
 function handleRemindIn(interaction: ChatInputCommandInteraction, userId: string, channelId: string) {
   const task = interaction.options.getString('task', true)
   const minutes = interaction.options.getInteger('minutes', true)
@@ -452,7 +467,8 @@ function handleRemindIn(interaction: ChatInputCommandInteraction, userId: string
 
   const flavor = randomFrom(FLAVOR.remind)
   const dueTimestamp = Math.floor(dueAt / 1000)
-  const text = `${flavor}\n\n\u23F0 **Reminder set!** I'll remind you <t:${dueTimestamp}:R> (<t:${dueTimestamp}:t>)`
+  const tzLabel = getTimezoneLabel()
+  const text = `${flavor}\n\n\u23F0 **Reminder set!** I'll remind you <t:${dueTimestamp}:R> (<t:${dueTimestamp}:t> ${tzLabel})`
   return buildToolMessage(text, PLAYFUL_COLOR)
 }
 
@@ -496,7 +512,8 @@ function handleRemindAt(interaction: ChatInputCommandInteraction, userId: string
 
   const flavor = randomFrom(FLAVOR.remind)
   const dueTimestamp = Math.floor(dueAt / 1000)
-  const text = `${flavor}\n\n\u23F0 **Reminder set for <t:${dueTimestamp}:t>!** I'll remind you <t:${dueTimestamp}:R>`
+  const tzLabel = getTimezoneLabel()
+  const text = `${flavor}\n\n\u23F0 **Reminder set for <t:${dueTimestamp}:t> ${tzLabel}!** I'll remind you <t:${dueTimestamp}:R>`
   return buildToolMessage(text, PLAYFUL_COLOR)
 }
 

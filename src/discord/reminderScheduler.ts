@@ -56,9 +56,9 @@ export function startReminderScheduler(client: Client): void {
         }
       }
     }
-  }, 15_000)
+  }, 5_000)
 
-  logger.info('Reminder scheduler started (15s interval)')
+  logger.info('Reminder scheduler started (5s interval)')
 }
 
 export function stopReminderScheduler(): void {
