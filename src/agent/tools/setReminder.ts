@@ -1,43 +1,13 @@
 /** Reminder tools: set, list, cancel */
 
 import { createReminder, getActiveReminders, getReminderById, deleteReminder } from '../../storage/reminderStore.js'
-import { config } from '../../config.js'
+import { getTimezoneLabel, formatTime } from '../../utils/timezone.js'
 
 export interface SetReminderParams {
   user_id: string
   channel_id: string
   reminder: string
   delay_minutes: number
-}
-
-/** Get the UTC offset label for the configured timezone */
-function getTimezoneLabel(): string {
-  const tz = config.timezone
-  if (!tz) return 'UTC'
-  try {
-    const formatter = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'shortOffset' })
-    const parts = formatter.formatToParts(new Date())
-    const tzPart = parts.find((p) => p.type === 'timeZoneName')
-    return tzPart?.value ?? tz
-  } catch {
-    return tz
-  }
-}
-
-/** Format a timestamp as a readable time string in the configured timezone */
-function formatTime(timestamp: number): string {
-  const tz = config.timezone ?? undefined
-  try {
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-      timeZone: tz
-    })
-    return formatter.format(new Date(timestamp))
-  } catch {
-    return new Date(timestamp).toLocaleTimeString()
-  }
 }
 
 /** Validate and create a reminder for a user */

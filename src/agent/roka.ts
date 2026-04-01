@@ -11,6 +11,7 @@ import { detectTone } from './toneDetector.js'
 import type { ToneKey } from './prompts/tones.js'
 import type { WindowMessage } from '../session/types.js'
 import { config } from '../config.js'
+import { getLocalHour } from '../utils/timezone.js'
 import { rokaTools } from './tools/index.js'
 import { saveMessage, loadHistory } from '../storage/sessionStore.js'
 import { getAllFactsForPrompt, refreshFactTimestamps } from '../storage/userMemory.js'
@@ -245,19 +246,6 @@ async function downloadImage(url: string): Promise<{ data: string; mimeType: str
   } catch (error) {
     logger.warn({ url, error }, 'Error downloading image')
     return null
-  }
-}
-
-/** Get the current hour (0-23) in the configured timezone */
-function getLocalHour(): number {
-  const tz = config.timezone
-  if (!tz) return new Date().getHours()
-  try {
-    const formatter = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: tz })
-    return parseInt(formatter.format(new Date()), 10)
-  } catch {
-    logger.warn({ timezone: tz }, 'Invalid timezone in config, falling back to system time')
-    return new Date().getHours()
   }
 }
 

@@ -7,6 +7,7 @@
 
 import { getDb } from '../storage/database.js'
 import { config } from '../config.js'
+import { getTodayDate, getYesterdayDate } from '../utils/timezone.js'
 import {
   SPECIES,
   RARITY_WEIGHTS,
@@ -17,6 +18,9 @@ import {
   type BuddyRarity,
   type SpeciesInfo
 } from './data/buddySpecies.js'
+
+// Re-export for backward compatibility with existing importers
+export { getTodayDate }
 
 // ── PRNG ──
 
@@ -39,18 +43,6 @@ export function hashString(str: string): number {
     hash = ((hash << 5) - hash + ch) | 0
   }
   return hash
-}
-
-// ── Date helper ──
-
-/** Get today's date string in YYYY-MM-DD format, respecting configured timezone. */
-export function getTodayDate(): string {
-  const tz = config.timezone ?? undefined
-  try {
-    return new Date().toLocaleDateString('en-CA', { timeZone: tz })
-  } catch {
-    return new Date().toISOString().slice(0, 10)
-  }
 }
 
 // ── Data model ──
@@ -283,17 +275,6 @@ export function hasHatchedToday(userId: string): boolean {
     | { last_draw_date: string }
     | undefined
   return row?.last_draw_date === today
-}
-
-/** Get yesterday's date string in configured timezone. */
-function getYesterdayDate(): string {
-  const tz = config.timezone ?? undefined
-  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
-  try {
-    return yesterday.toLocaleDateString('en-CA', { timeZone: tz })
-  } catch {
-    return yesterday.toISOString().slice(0, 10)
-  }
 }
 
 /** Mark that the user has hatched today and update their streak. */

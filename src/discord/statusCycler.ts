@@ -1,18 +1,7 @@
 import { ActivityType, type Client } from 'discord.js'
 import { config } from '../config.js'
 import { logger } from '../utils/logger.js'
-
-/** Get the current hour (0-23) in the configured timezone */
-function getLocalHour(): number {
-  const tz = config.timezone
-  if (!tz) return new Date().getHours()
-  try {
-    const formatter = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: tz })
-    return parseInt(formatter.format(new Date()), 10)
-  } catch {
-    return new Date().getHours()
-  }
-}
+import { getLocalHour } from '../utils/timezone.js'
 
 /** Status messages mapped to time-of-day ranges */
 const STATUS_SCHEDULE: Array<{ hours: [number, number]; statuses: string[] }> = [

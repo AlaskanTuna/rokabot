@@ -17,6 +17,7 @@ import { getAnimeSchedule } from '../../agent/tools/getAnimeSchedule.js'
 import { searchWeb } from '../../agent/tools/searchWeb.js'
 import { createReminder, getActiveReminders, getReminderById, deleteReminder } from '../../storage/reminderStore.js'
 import { config } from '../../config.js'
+import { getTimezoneLabel } from '../../utils/timezone.js'
 
 const PLAYFUL_COLOR = 0xffb3d9
 const CURIOUS_COLOR = 0xb2ebf2
@@ -436,21 +437,6 @@ function handleRemind(interaction: ChatInputCommandInteraction) {
       return handleRemindCancel(interaction, userId)
     default:
       return buildToolMessage("Hmm, I don't know that subcommand~", PLAYFUL_COLOR)
-  }
-}
-
-/** Get the UTC offset label for the configured timezone (e.g., "UTC+8", "UTC-5"). */
-function getTimezoneLabel(): string {
-  const tz = config.timezone
-  if (!tz) return 'UTC'
-  try {
-    const now = new Date()
-    const formatter = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'shortOffset' })
-    const parts = formatter.formatToParts(now)
-    const tzPart = parts.find((p) => p.type === 'timeZoneName')
-    return tzPart?.value ?? tz
-  } catch {
-    return tz
   }
 }
 
