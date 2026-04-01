@@ -129,12 +129,43 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
         }
       }
 
-      // Extract forwarded message content
+      // Extract forwarded message content (plain text, components, embeds, attachments)
       if (referencedMessage.messageSnapshots.size > 0) {
         for (const snapshot of referencedMessage.messageSnapshots.values()) {
+          const fwdParts: string[] = []
+
+          // Plain text content
           const fwdContent = snapshot.content?.trim()
-          if (fwdContent) {
-            refParts.push(`[Forwarded: ${fwdContent}]`)
+          if (fwdContent) fwdParts.push(fwdContent)
+
+          // Components V2 text (forwarded container messages)
+          if (snapshot.components && snapshot.components.length > 0) {
+            const compTexts = extractComponentTexts(snapshot.components)
+            if (compTexts.length > 0) fwdParts.push(compTexts.join(' | '))
+          }
+
+          // Embeds in forwarded message
+          if (snapshot.embeds && snapshot.embeds.length > 0) {
+            for (const embed of snapshot.embeds) {
+              const eParts: string[] = []
+              if (embed.title) eParts.push(embed.title)
+              if (embed.description) eParts.push(embed.description)
+              if (eParts.length > 0) fwdParts.push(eParts.join(': '))
+            }
+          }
+
+          // Forwarded image attachments
+          if (snapshot.attachments && snapshot.attachments.size > 0) {
+            const fwdImages = snapshot.attachments
+              .filter((a) => a.contentType !== null && ALLOWED_IMAGE_TYPES.has(a.contentType))
+              .map((a) => ({ url: a.url, contentType: a.contentType! }))
+              .slice(0, MAX_IMAGE_ATTACHMENTS - imageAttachments.length)
+            imageAttachments.push(...fwdImages)
+            if (fwdImages.length > 0) fwdParts.push('(forwarded image(s))')
+          }
+
+          if (fwdParts.length > 0) {
+            refParts.push(`[Forwarded: ${fwdParts.join(' | ')}]`)
           }
         }
       }
