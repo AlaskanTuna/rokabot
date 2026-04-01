@@ -1,6 +1,7 @@
 import type { Client, Message } from 'discord.js'
 import { DiscordAPIError } from 'discord.js'
 import { logger } from '../../utils/logger.js'
+import { isIgnorableDiscordError } from '../errorHandler.js'
 import { RateLimiter } from '../../utils/rateLimiter.js'
 import { getRandomBusy, getRandomDecline, getRandomError, splitResponse } from '../responses.js'
 import { buildRokaMessage } from '../messageBuilder.js'
@@ -50,6 +51,9 @@ function extractComponentTexts(components: Message['components']): string[] {
   return texts
 }
 
+const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp'])
+const MAX_IMAGE_ATTACHMENTS = 3
+
 /** Create a handler for mention/reply message triggers */
 export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
   return async function handleMessageCreate(message: Message): Promise<void> {
@@ -94,8 +98,6 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
 
     let content = message.content.replace(/<@!?\d+>/g, '').trim()
 
-    const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp'])
-    const MAX_IMAGE_ATTACHMENTS = 3
     const imageAttachments: ImageAttachment[] = message.attachments
       .filter((a) => a.contentType !== null && ALLOWED_IMAGE_TYPES.has(a.contentType))
       .map((a) => ({ url: a.url, contentType: a.contentType! }))
@@ -179,7 +181,6 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
         }
       }
 
-      // Extract sticker names
       if (referencedMessage.stickers.size > 0) {
         const stickerNames = referencedMessage.stickers.map((s) => s.name).join(', ')
         refParts.push(`(sticker: ${stickerNames})`)
@@ -192,7 +193,6 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
         content = content ? `${refContext}\n${content}` : refContext
       }
 
-      // Forward images from the referenced message so Roka can see them
       const refImages: ImageAttachment[] = referencedMessage.attachments
         .filter((a) => a.contentType !== null && ALLOWED_IMAGE_TYPES.has(a.contentType))
         .map((a) => ({ url: a.url, contentType: a.contentType! }))
@@ -200,7 +200,6 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
 
       imageAttachments.push(...refImages)
 
-      // Also grab images from embed thumbnails (link preview images, social cards, etc.)
       if (imageAttachments.length < MAX_IMAGE_ATTACHMENTS) {
         for (const embed of referencedMessage.embeds) {
           if (imageAttachments.length >= MAX_IMAGE_ATTACHMENTS) break
@@ -212,7 +211,6 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
       }
     }
 
-    // Check for gacha keywords before calling LLM
     const gachaKeywords = /^(gacha|draw|fortune|omikuji)$/i
     if (gachaKeywords.test(content.trim())) {
       const handled = await handleGachaMention(message)
@@ -276,12 +274,9 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
         }
       }
     } catch (error) {
-      if (error instanceof DiscordAPIError) {
-        const code = error.code
-        if (code === 50013 || code === 10008) {
-          logger.warn({ error, channelId, code }, 'Discord API error (ignored)')
-          return
-        }
+      if (isIgnorableDiscordError(error)) {
+        logger.warn({ error, channelId, code: (error as DiscordAPIError).code }, 'Discord API error (ignored)')
+        return
       }
       const errDetail =
         error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error
@@ -289,7 +284,7 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
       try {
         await message.reply(getRandomError())
       } catch (replyError) {
-        if (replyError instanceof DiscordAPIError && (replyError.code === 50013 || replyError.code === 10008)) {
+        if (isIgnorableDiscordError(replyError)) {
           logger.warn({ error: replyError, channelId }, 'Could not send error reply (ignored)')
         } else {
           logger.error({ error: replyError, channelId }, 'Failed to send error reply')

@@ -23,6 +23,7 @@ import { closeDb, getDb } from './storage/database.js'
 import { pruneOldHistory } from './storage/sessionStore.js'
 import { pruneOldFacts } from './storage/userMemory.js'
 import { cleanupExpired } from './agent/channelMonitor.js'
+import { cleanupExpiredCooldowns } from './discord/emojiReactor.js'
 import { startReminderScheduler, stopReminderScheduler } from './discord/reminderScheduler.js'
 import { destroyAllGames as destroyAllShiritoriGames } from './games/shiritori.js'
 import { stopStatusCycler } from './discord/statusCycler.js'
@@ -39,6 +40,7 @@ client.once('clientReady', () => {
   setInterval(() => pruneOldHistory(), 60 * 60 * 1000)
   setInterval(() => pruneOldFacts(config.memory.factRetentionDays), 24 * 60 * 60 * 1000)
   setInterval(() => cleanupExpired(), 60 * 60 * 1000)
+  setInterval(() => cleanupExpiredCooldowns(), 60 * 60 * 1000)
 })
 
 const healthServer = http.createServer((_, res) => {

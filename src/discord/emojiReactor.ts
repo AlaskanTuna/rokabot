@@ -182,6 +182,16 @@ export function shouldReact(content: string, channelId: string): string | null {
   return emoji
 }
 
+/** Remove expired cooldown entries */
+export function cleanupExpiredCooldowns(): void {
+  const now = Date.now()
+  for (const [channelId, timestamp] of cooldowns) {
+    if (now - timestamp > config.emoji.cooldownMs) {
+      cooldowns.delete(channelId)
+    }
+  }
+}
+
 /** Reset all cooldowns for testing */
 export function resetCooldowns(): void {
   cooldowns.clear()

@@ -25,7 +25,10 @@ export function addMessage(channelId: string, userId: string, displayName: strin
   buf.userMap.set(displayName, userId)
   buf.messages.push({ displayName, userId, content, timestamp: Date.now() })
   if (buf.messages.length > BUFFER_SIZE) {
-    buf.messages.shift()
+    const removed = buf.messages.shift()
+    if (removed && !buf.messages.some((m) => m.displayName === removed.displayName)) {
+      buf.userMap.delete(removed.displayName)
+    }
   }
   return buf.messages.length
 }

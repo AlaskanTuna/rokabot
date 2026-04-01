@@ -1,6 +1,7 @@
 import type { Client, Interaction } from 'discord.js'
 import { DiscordAPIError } from 'discord.js'
 import { logger } from '../../utils/logger.js'
+import { isIgnorableDiscordError } from '../errorHandler.js'
 import { RateLimiter } from '../../utils/rateLimiter.js'
 import { getRandomBusy, getRandomDecline, getRandomError, splitResponse } from '../responses.js'
 import { buildRokaMessage } from '../messageBuilder.js'
@@ -79,12 +80,9 @@ export function createInteractionHandler(rateLimiter: RateLimiter, client?: Clie
         await interaction.followUp(buildRokaMessage(chunks[i], tone))
       }
     } catch (error) {
-      if (error instanceof DiscordAPIError) {
-        const code = error.code
-        if (code === 50013 || code === 10008) {
-          logger.warn({ error, channelId, code }, 'Discord API error (ignored)')
-          return
-        }
+      if (isIgnorableDiscordError(error)) {
+        logger.warn({ error, channelId, code: (error as DiscordAPIError).code }, 'Discord API error (ignored)')
+        return
       }
       const errDetail =
         error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error
@@ -92,7 +90,7 @@ export function createInteractionHandler(rateLimiter: RateLimiter, client?: Clie
       try {
         await interaction.editReply({ content: getRandomError() })
       } catch (replyError) {
-        if (replyError instanceof DiscordAPIError && (replyError.code === 50013 || replyError.code === 10008)) {
+        if (isIgnorableDiscordError(replyError)) {
           logger.warn({ error: replyError, channelId }, 'Could not send error reply (ignored)')
         } else {
           logger.error({ error: replyError, channelId }, 'Failed to send error reply')
