@@ -4,10 +4,9 @@ import { GoogleGenAI } from '@google/genai'
 import { config } from '../config.js'
 import { logger } from '../utils/logger.js'
 import { saveFact, getFacts } from '../storage/userMemory.js'
-import { getMessages, clearBuffer, type BufferedMessage } from './passiveBuffer.js'
+import { getMessages, type BufferedMessage } from './passiveBuffer.js'
 
-const EXTRACTION_INTERVAL = config.memory.extractionInterval
-const MIN_RPM_HEADROOM = 3
+const messageCounts = new Map<string, number>() // channelId → messages since last extraction
 
 let lastExtractionTime = 0
 let genaiClient: GoogleGenAI | null = null
@@ -53,21 +52,24 @@ interface ExtractedFact {
   value: string
 }
 
-/** Trigger background extraction when the passive buffer reaches capacity */
+/** Increment message counter and trigger extraction when threshold is reached */
 export function maybeExtractFromBuffer(channelId: string, botUserId?: string): void {
-  const messages = getMessages(channelId)
-  if (messages.length < config.memory.extractionInterval) return
+  const count = (messageCounts.get(channelId) ?? 0) + 1
+  messageCounts.set(channelId, count)
+
+  if (count < config.memory.extractionInterval) return
 
   const now = Date.now()
   if (now - lastExtractionTime < config.memory.extractionGapMs) {
     logger.debug({ channelId }, 'Memory extraction skipped (too recent)')
     return
   }
+
+  messageCounts.set(channelId, 0)
   lastExtractionTime = now
 
-  logger.info({ channelId, messageCount: messages.length }, 'Passive buffer full, triggering memory extraction')
-
-  clearBuffer(channelId)
+  const messages = [...getMessages(channelId)]
+  logger.info({ channelId, messageCount: messages.length }, 'Extraction threshold reached, triggering memory extraction')
 
   void runBufferExtraction(channelId, messages, botUserId).catch((error) => {
     logger.warn({ channelId, error }, 'Passive buffer memory extraction failed')
@@ -166,7 +168,8 @@ function parseFacts(text: string): ExtractedFact[] {
 /** Reset state for testing */
 export function resetCounters(): void {
   lastExtractionTime = 0
+  messageCounts.clear()
 }
 
 /** Exposed for testing */
-export { parseFacts as _parseFacts, EXTRACTION_INTERVAL }
+export { parseFacts as _parseFacts }

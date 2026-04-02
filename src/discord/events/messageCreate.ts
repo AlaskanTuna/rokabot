@@ -11,7 +11,7 @@ import { shouldReact } from '../emojiReactor.js'
 import { handleGachaMention } from './gachaMention.js'
 import { markActive, isMonitored } from '../../agent/channelMonitor.js'
 import { addMessage as addToPassiveBuffer } from '../../agent/passiveBuffer.js'
-import { maybeExtractFromBuffer, EXTRACTION_INTERVAL } from '../../agent/memoryExtractor.js'
+import { maybeExtractFromBuffer } from '../../agent/memoryExtractor.js'
 
 const TEXT_DISPLAY = 10
 const SECTION = 9
@@ -83,15 +83,13 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
     if (message.guild && !message.author.bot && isMonitored(message.channelId)) {
       const msgContent = message.content.replace(/<@!?\d+>/g, '').trim()
       if (msgContent) {
-        const count = addToPassiveBuffer(
+        addToPassiveBuffer(
           message.channelId,
           message.author.id,
           message.member?.displayName ?? message.author.displayName,
           msgContent
         )
-        if (count >= EXTRACTION_INTERVAL) {
-          maybeExtractFromBuffer(message.channelId, client.user?.id)
-        }
+        maybeExtractFromBuffer(message.channelId, client.user?.id)
       }
     }
 
@@ -281,10 +279,8 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
       // Add bot response to passive buffer for richer extraction context
       if (message.guild && client.user && isMonitored(channelId)) {
         const botName = message.guild.members.me?.displayName ?? client.user.displayName
-        const bufCount = addToPassiveBuffer(channelId, client.user.id, botName, responseText)
-        if (bufCount >= EXTRACTION_INTERVAL) {
-          maybeExtractFromBuffer(channelId, client.user.id)
-        }
+        addToPassiveBuffer(channelId, client.user.id, botName, responseText)
+        maybeExtractFromBuffer(channelId, client.user.id)
       }
     } catch (error) {
       if (isIgnorableDiscordError(error)) {

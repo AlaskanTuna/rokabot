@@ -15,6 +15,7 @@ import { getLocalHour } from '../utils/timezone.js'
 import { rokaTools } from './tools/index.js'
 import { saveMessage, loadHistory } from '../storage/sessionStore.js'
 import { getAllFactsForPrompt, refreshFactTimestamps } from '../storage/userMemory.js'
+import { getMessages as getBufferMessages } from './passiveBuffer.js'
 
 export interface ImageAttachment {
   url: string
@@ -305,6 +306,12 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
     }
   } catch (error) {
     logger.warn({ userId, error }, 'Failed to load user memory for prompt injection')
+  }
+
+  const overheard = getBufferMessages(channelId)
+  if (overheard.length > 0) {
+    const overheardText = overheard.map((m) => `[${m.displayName}]: ${m.content}`).join('\n')
+    systemPrompt += `\n\n## Recent Channel Activity (messages you overheard)\n${overheardText}`
   }
 
   systemPrompt +=
