@@ -24,7 +24,8 @@ function createTestDb(): Database.Database {
       role TEXT NOT NULL,
       display_name TEXT NOT NULL,
       content TEXT NOT NULL,
-      timestamp INTEGER NOT NULL
+      timestamp INTEGER NOT NULL,
+      user_id TEXT DEFAULT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_session_history_channel_ts
       ON session_history (channel_id, timestamp);

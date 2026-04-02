@@ -13,7 +13,7 @@ import type { WindowMessage } from '../session/types.js'
 import { config } from '../config.js'
 import { getLocalHour } from '../utils/timezone.js'
 import { rokaTools } from './tools/index.js'
-import { saveMessage, loadHistory } from '../storage/sessionStore.js'
+import { saveMessage, loadHistory, getUserIdMap } from '../storage/sessionStore.js'
 import { getAllFactsForPrompt, refreshFactTimestamps } from '../storage/userMemory.js'
 import { getMessages as getBufferMessages, getUserMap as getBufferUserMap } from './passiveBuffer.js'
 
@@ -299,9 +299,11 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
   let systemPrompt = assembleSystemPrompt({ tone, participants, hour, displayName })
 
   try {
-    // Collect all known users from passive buffer + current speaker
+    // Collect all known users from session history + passive buffer + current speaker
+    const historyUsers = getUserIdMap(channelId, config.session.windowSize)
     const bufferUsers = getBufferUserMap(channelId)
-    const allUsers = new Map<string, string>(bufferUsers)
+    const allUsers = new Map<string, string>(historyUsers)
+    for (const [name, uid] of bufferUsers) allUsers.set(name, uid)
     allUsers.set(displayName, userId)
 
     const factLines: string[] = []
@@ -419,7 +421,7 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
 
       if (!KNOWN_FALLBACKS.has(responseText)) {
         try {
-          saveMessage(channelId, 'user', displayName, userMessage)
+          saveMessage(channelId, 'user', displayName, userMessage, userId)
           saveMessage(channelId, 'assistant', 'Roka', responseText)
         } catch (error) {
           logger.warn({ channelId, error }, 'Failed to persist messages to SQLite')

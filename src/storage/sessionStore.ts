@@ -13,13 +13,20 @@ import type { WindowMessage } from '../session/types.js'
  * @param role - Message author role ('user' or 'assistant')
  * @param displayName - Display name of the message author
  * @param content - Message text content
+ * @param userId - Discord user ID (optional, for user messages)
  */
-export function saveMessage(channelId: string, role: 'user' | 'assistant', displayName: string, content: string): void {
+export function saveMessage(
+  channelId: string,
+  role: 'user' | 'assistant',
+  displayName: string,
+  content: string,
+  userId?: string
+): void {
   const db = getDb()
   const stmt = db.prepare(
-    'INSERT INTO session_history (channel_id, role, display_name, content, timestamp) VALUES (?, ?, ?, ?, ?)'
+    'INSERT INTO session_history (channel_id, role, display_name, content, timestamp, user_id) VALUES (?, ?, ?, ?, ?, ?)'
   )
-  stmt.run(channelId, role, displayName, content, Date.now())
+  stmt.run(channelId, role, displayName, content, Date.now(), userId ?? null)
 }
 
 /**
@@ -74,4 +81,22 @@ export function pruneOldHistory(maxAgeDays: number = 7): number {
     logger.info({ pruned: result.changes, maxAgeDays }, 'Pruned old session history')
   }
   return result.changes
+}
+
+/** Get display_name → user_id mappings from recent session history for a channel */
+export function getUserIdMap(channelId: string, limit: number): Map<string, string> {
+  const db = getDb()
+  const rows = db
+    .prepare(
+      `SELECT DISTINCT display_name, user_id FROM session_history
+       WHERE channel_id = ? AND user_id IS NOT NULL AND role = 'user'
+       ORDER BY timestamp DESC LIMIT ?`
+    )
+    .all(channelId, limit) as Array<{ display_name: string; user_id: string }>
+
+  const map = new Map<string, string>()
+  for (const row of rows) {
+    map.set(row.display_name, row.user_id)
+  }
+  return map
 }

@@ -107,9 +107,19 @@ export function getDb(): Database.Database {
     db.pragma('journal_mode = WAL')
     db.pragma('synchronous = NORMAL')
     createTables(db)
+    runMigrations(db)
     logger.info({ path: dbPath }, 'SQLite database initialized')
   }
   return db
+}
+
+/** Run forward-only schema migrations */
+function runMigrations(database: Database.Database): void {
+  // Add user_id column to session_history (nullable for existing rows)
+  const columns = database.prepare("PRAGMA table_info('session_history')").all() as Array<{ name: string }>
+  if (!columns.some((c) => c.name === 'user_id')) {
+    database.exec("ALTER TABLE session_history ADD COLUMN user_id TEXT DEFAULT NULL")
+  }
 }
 
 /** Close the database connection. Safe to call multiple times. */
