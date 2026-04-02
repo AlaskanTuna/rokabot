@@ -24,18 +24,11 @@ Rokabot responds to `/chat` slash commands, @mentions, and replies with in-chara
 ## Features
 
 - **In-character roleplay** -- Maniwa Roka personality with 12 dynamic tones and Components V2 styled responses
-- **Multiple triggers** -- `/chat`, @mentions, replies (with poll, forward, and sticker context), and image perception
-- **Image pre-processing** -- `sharp`-based resize, sharpen, and normalize pipeline for optimal Gemini vision input
-- **10 agent tools** -- dice, coin, clock, anime search, schedule, weather, web search, user memory, reminders
-- **3 mini-games** -- `/shiritori`, `/gacha` (buddy pets), `/hangman` with leaderboards and guides
-- **Buddy pet system** -- hatch a deterministic VN companion spirit (18 species, 5 rarity tiers, 5 stats)
-- **Per-user memory** -- passively monitors active channels and extracts user facts every 10 messages with 90-day retention
-- **Overheard context** -- injects recent channel messages into the system prompt so Roka is aware of conversations she wasn't directly part of
-- **Reminders** -- set via conversation or `/remind` command, with timezone-aware scheduling and DM fallback
+- **Channel-aware** -- passively monitors conversations, injects overheard context, and loads facts for all participants so Roka knows what's happening around her
+- **Per-user memory** -- background fact extraction with cross-server identity resolution via Discord username
+- **10 agent tools** -- dice, coin, clock, anime/schedule search, weather, web search, user memory, reminders
+- **3 mini-games** -- shiritori, buddy pets (18 species, 5 rarity tiers), hangman with leaderboards
 - **SQLite persistence** -- sessions, memory, reminders, and game scores survive restarts
-- **Session history auto-pruning** -- hourly cleanup of history older than 7 days
-- **Passive emoji reactions** -- contextual emoji reactions on guild messages (probability-gated)
-- **Dynamic status** -- bot presence cycles through time-of-day activities every 15 minutes
 
 ---
 
@@ -77,7 +70,7 @@ flowchart LR
     Session --> Rehydrate{"Cold start?\n(no in-memory session)"}
     Rehydrate -->|Yes| Load["Load history\nfrom SQLite"]
     Rehydrate -->|No| Prompt
-    Load --> Prompt["Assemble system prompt\nDetect tone + Load user facts\n+ Overheard context\nBuild 4 layers"]
+    Load --> Prompt["Assemble system prompt\nDetect tone + Load ALL users' facts\n+ Overheard context (last 10 msgs)\nBuild 4 layers"]
     Prompt --> Gemini["Send to Gemini\nvia ADK Runner"]
     Gemini --> ToolCheck{Tool call?}
     ToolCheck -->|Yes| Execute["Execute tool\n(up to 3 chained calls)"]
@@ -134,7 +127,7 @@ flowchart TD
     L2["Layer 2\nTone Variant"] --> Combine
     L3["Layer 3\nDynamic Context"] --> Combine
     Combine["Assembled\nSystem Prompt"]
-    UserFacts["User Memory\n(from SQLite)"] -->|appended if exists| Combine
+    UserFacts["All Participants' Facts\n(resolved by username)"] -->|appended| Combine
     Overheard["Overheard Context\n(last 10 channel messages)"] -->|appended if monitored| Combine
 ```
 
@@ -142,8 +135,8 @@ flowchart TD
 - **Layer 1 (Speech)** -- formatting rules, speech patterns, response length
 - **Layer 2 (Tone)** -- one of 12 tone variants selected by the tone detector
 - **Layer 3 (Context)** -- time of day, participant names, current user
-- **User Memory** -- per-user facts appended when available (e.g., nickname, favorite anime)
-- **Overheard Context** -- last 10 messages from the channel's passive buffer, giving Roka awareness of nearby conversation
+- **User Facts** -- facts for all known channel participants, labeled as `username (DisplayName)` for cross-server identity
+- **Overheard Context** -- last 10 messages from the passive buffer so Roka knows what's happening around her
 
 </details>
 
