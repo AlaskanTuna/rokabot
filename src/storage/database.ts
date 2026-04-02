@@ -93,6 +93,13 @@ function createTables(database: Database.Database): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_buddy_user ON buddy (user_id, hatched_at);
+
+    CREATE TABLE IF NOT EXISTS user_names (
+      user_id TEXT PRIMARY KEY,
+      username TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
   `)
 }
 

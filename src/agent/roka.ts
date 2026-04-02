@@ -15,7 +15,8 @@ import { getLocalHour } from '../utils/timezone.js'
 import { rokaTools } from './tools/index.js'
 import { saveMessage, loadHistory, getChannelUsers } from '../storage/sessionStore.js'
 import { getAllFactsForPrompt, refreshFactTimestamps } from '../storage/userMemory.js'
-import { getMessages as getBufferMessages, getUsernameMap as getBufferUsernameMap } from './passiveBuffer.js'
+import { getAllUserNames, type UserName } from '../storage/userNames.js'
+import { getMessages as getBufferMessages } from './passiveBuffer.js'
 
 export interface ImageAttachment {
   url: string
@@ -300,19 +301,25 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
   let systemPrompt = assembleSystemPrompt({ tone, participants, hour, displayName })
 
   try {
-    // Collect all known users keyed by userId: session history + passive buffer + current speaker
-    const allUsers = getChannelUsers(channelId, config.session.windowSize)
-    const bufferUsernames = getBufferUsernameMap(channelId)
-    for (const [uid, uname] of bufferUsernames) {
-      if (!allUsers.has(uid)) allUsers.set(uid, { userId: uid, displayName: uname, username: uname })
+    // Resolve user identities from persistent lookup table (survives restarts)
+    const knownUsers = getAllUserNames()
+
+    // Also pull channel-specific users from session history (has channel context)
+    const channelUsers = getChannelUsers(channelId, config.session.windowSize)
+    for (const [uid, user] of channelUsers) {
+      if (!knownUsers.has(uid) && user.username) {
+        knownUsers.set(uid, { userId: uid, username: user.username, displayName: user.displayName })
+      }
     }
-    allUsers.set(userId, { userId, displayName, username })
+
+    // Ensure current speaker is included
+    knownUsers.set(userId, { userId, username, displayName })
 
     const factLines: string[] = []
-    for (const [uid, user] of allUsers) {
+    for (const [uid, user] of knownUsers) {
       const facts = getAllFactsForPrompt(uid)
       if (facts) {
-        const label = user.username && user.username !== user.displayName
+        const label = user.username !== user.displayName
           ? `${user.username} (${user.displayName})`
           : user.displayName
         factLines.push(`- ${label}: ${facts}`)
@@ -321,7 +328,7 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
     }
     if (factLines.length > 0) {
       systemPrompt += `\n\n## What You Remember About People In This Channel\n${factLines.join('\n')}`
-      logger.info({ channelId, usersWithFacts: factLines.length, totalUsers: allUsers.size }, 'User facts injected into prompt')
+      logger.info({ channelId, usersWithFacts: factLines.length, totalUsers: knownUsers.size }, 'User facts injected into prompt')
     }
   } catch (error) {
     logger.warn({ userId, error }, 'Failed to load user memory for prompt injection')

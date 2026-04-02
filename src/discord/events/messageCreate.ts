@@ -12,6 +12,7 @@ import { handleGachaMention } from './gachaMention.js'
 import { markActive, isMonitored } from '../../agent/channelMonitor.js'
 import { addMessage as addToPassiveBuffer } from '../../agent/passiveBuffer.js'
 import { maybeExtractFromBuffer } from '../../agent/memoryExtractor.js'
+import { upsertUserName } from '../../storage/userNames.js'
 
 const TEXT_DISPLAY = 10
 const SECTION = 9
@@ -83,13 +84,15 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
     if (message.guild && !message.author.bot && isMonitored(message.channelId)) {
       const msgContent = message.content.replace(/<@!?\d+>/g, '').trim()
       if (msgContent) {
+        const memberDisplayName = message.member?.displayName ?? message.author.displayName
         addToPassiveBuffer(
           message.channelId,
           message.author.id,
-          message.member?.displayName ?? message.author.displayName,
+          memberDisplayName,
           message.author.username,
           msgContent
         )
+        upsertUserName(message.author.id, message.author.username, memberDisplayName)
         maybeExtractFromBuffer(message.channelId, client.user?.id)
       }
     }
