@@ -15,7 +15,7 @@ import { getLocalHour } from '../utils/timezone.js'
 import { rokaTools } from './tools/index.js'
 import { saveMessage, loadHistory } from '../storage/sessionStore.js'
 import { getAllFactsForPrompt, refreshFactTimestamps } from '../storage/userMemory.js'
-import { getMessages as getBufferMessages } from './passiveBuffer.js'
+import { getMessages as getBufferMessages, getUserMap as getBufferUserMap } from './passiveBuffer.js'
 
 export interface ImageAttachment {
   url: string
@@ -299,10 +299,21 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
   let systemPrompt = assembleSystemPrompt({ tone, participants, hour, displayName })
 
   try {
-    const userFacts = getAllFactsForPrompt(userId)
-    if (userFacts) {
-      systemPrompt += `\n\n## What You Remember About ${displayName}\n- ${userFacts}`
-      refreshFactTimestamps(userId)
+    // Collect all known users from passive buffer + current speaker
+    const bufferUsers = getBufferUserMap(channelId)
+    const allUsers = new Map<string, string>(bufferUsers)
+    allUsers.set(displayName, userId)
+
+    const factLines: string[] = []
+    for (const [name, uid] of allUsers) {
+      const facts = getAllFactsForPrompt(uid)
+      if (facts) {
+        factLines.push(`- ${name}: ${facts}`)
+        refreshFactTimestamps(uid)
+      }
+    }
+    if (factLines.length > 0) {
+      systemPrompt += `\n\n## What You Remember About People In This Channel\n${factLines.join('\n')}`
     }
   } catch (error) {
     logger.warn({ userId, error }, 'Failed to load user memory for prompt injection')

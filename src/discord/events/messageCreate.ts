@@ -195,19 +195,22 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
         content = content ? `${refContext}\n${content}` : refContext
       }
 
-      const refImages: ImageAttachment[] = referencedMessage.attachments
-        .filter((a) => a.contentType !== null && ALLOWED_IMAGE_TYPES.has(a.contentType))
-        .map((a) => ({ url: a.url, contentType: a.contentType! }))
-        .slice(0, MAX_IMAGE_ATTACHMENTS - imageAttachments.length)
+      // Skip image extraction from bot's own messages (expression thumbnails waste tokens)
+      if (!isReplyToBot) {
+        const refImages: ImageAttachment[] = referencedMessage.attachments
+          .filter((a) => a.contentType !== null && ALLOWED_IMAGE_TYPES.has(a.contentType))
+          .map((a) => ({ url: a.url, contentType: a.contentType! }))
+          .slice(0, MAX_IMAGE_ATTACHMENTS - imageAttachments.length)
 
-      imageAttachments.push(...refImages)
+        imageAttachments.push(...refImages)
 
-      if (imageAttachments.length < MAX_IMAGE_ATTACHMENTS) {
-        for (const embed of referencedMessage.embeds) {
-          if (imageAttachments.length >= MAX_IMAGE_ATTACHMENTS) break
-          const embedImageUrl = embed.image?.url ?? embed.thumbnail?.url
-          if (embedImageUrl) {
-            imageAttachments.push({ url: embedImageUrl, contentType: 'image/png' })
+        if (imageAttachments.length < MAX_IMAGE_ATTACHMENTS) {
+          for (const embed of referencedMessage.embeds) {
+            if (imageAttachments.length >= MAX_IMAGE_ATTACHMENTS) break
+            const embedImageUrl = embed.image?.url ?? embed.thumbnail?.url
+            if (embedImageUrl) {
+              imageAttachments.push({ url: embedImageUrl, contentType: 'image/png' })
+            }
           }
         }
       }
