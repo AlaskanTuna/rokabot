@@ -316,6 +316,7 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
     }
     if (factLines.length > 0) {
       systemPrompt += `\n\n## What You Remember About People In This Channel\n${factLines.join('\n')}`
+      logger.info({ channelId, usersWithFacts: factLines.length, totalUsers: allUsers.size }, 'User facts injected into prompt')
     }
   } catch (error) {
     logger.warn({ userId, error }, 'Failed to load user memory for prompt injection')

@@ -27,6 +27,13 @@ export function saveMessage(
     'INSERT INTO session_history (channel_id, role, display_name, content, timestamp, user_id) VALUES (?, ?, ?, ?, ?, ?)'
   )
   stmt.run(channelId, role, displayName, content, Date.now(), userId ?? null)
+
+  // Backfill user_id on old rows so cold-start mapping works
+  if (userId && role === 'user') {
+    db.prepare(
+      'UPDATE session_history SET user_id = ? WHERE channel_id = ? AND display_name = ? AND user_id IS NULL'
+    ).run(userId, channelId, displayName)
+  }
 }
 
 /**
