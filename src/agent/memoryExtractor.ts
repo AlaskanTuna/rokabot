@@ -19,22 +19,24 @@ function getClient(): GoogleGenAI {
   return genaiClient
 }
 
-const EXTRACTION_PROMPT = `You are a fact extractor. Given a conversation, extract ANY personal detail or behavioral signal about the USERS (not the bot/assistant).
+const EXTRACTION_PROMPT = `You are a fact extractor. Given a conversation, extract personal details and behavioral signals about the USERS (not the bot/assistant).
 
 Extract generously — even small or indirect clues count. Categories:
 - Identity: names, nicknames, age, gender, height, nationality, language spoken, location
-- Lifestyle: occupation, school, pets, daily routine, sleep schedule, diet
+- Lifestyle: occupation, school, pets, daily routine, diet
 - Interests: games, anime, music, shows, hobbies, sports, things they mention enjoying or disliking
 - Social: relationships, who they hang out with, friend groups, how they talk to others
 - Personality: humor style, catchphrases, recurring jokes, teasing habits, communication style
 - Opinions: strong likes/dislikes, preferences, things they recommend or complain about
-- Current state: what they're doing today, plans, recent events, mood patterns over time
 
 Guidelines:
 - Infer from context: "I just got home from work" → occupation is likely office worker
 - Capture opinions: "ugh I hate horror games" → dislikes horror games
 - Capture habits: if someone always greets in Japanese → communication_style: uses Japanese greetings
-- Skip: single-use reactions to the conversation itself, facts about the bot/assistant
+- SKIP momentary/temporary states that will be irrelevant tomorrow: "going to sleep", "going home", "feeling bored", "using Instagram right now", "experiencing a tech issue", current moods, what someone is doing at this exact moment
+- SKIP single-use reactions to the conversation itself
+- SKIP facts about the bot/assistant
+- Only extract things that would still be true or relevant a week from now
 - Each fact: user's display name (from [Name] prefix), a descriptive snake_case key, and the value
 - When uncertain, still extract with the value reflecting the uncertainty ("probably a student")
 
