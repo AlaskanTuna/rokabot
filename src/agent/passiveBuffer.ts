@@ -4,6 +4,7 @@ import { config } from '../config.js'
 
 export interface BufferedMessage {
   displayName: string
+  username: string
   userId: string
   content: string
   timestamp: number
@@ -12,22 +13,33 @@ export interface BufferedMessage {
 interface ChannelBuffer {
   messages: BufferedMessage[]
   userMap: Map<string, string> // displayName → userId
+  usernameMap: Map<string, string> // userId → username
 }
 
 const BUFFER_SIZE = config.memory.bufferSize
 const buffers = new Map<string, ChannelBuffer>()
 
-export function addMessage(channelId: string, userId: string, displayName: string, content: string): number {
+export function addMessage(
+  channelId: string,
+  userId: string,
+  displayName: string,
+  username: string,
+  content: string
+): number {
   if (!buffers.has(channelId)) {
-    buffers.set(channelId, { messages: [], userMap: new Map() })
+    buffers.set(channelId, { messages: [], userMap: new Map(), usernameMap: new Map() })
   }
   const buf = buffers.get(channelId)!
   buf.userMap.set(displayName, userId)
-  buf.messages.push({ displayName, userId, content, timestamp: Date.now() })
+  buf.usernameMap.set(userId, username)
+  buf.messages.push({ displayName, username, userId, content, timestamp: Date.now() })
   if (buf.messages.length > BUFFER_SIZE) {
     const removed = buf.messages.shift()
     if (removed && !buf.messages.some((m) => m.displayName === removed.displayName)) {
       buf.userMap.delete(removed.displayName)
+    }
+    if (removed && !buf.messages.some((m) => m.userId === removed.userId)) {
+      buf.usernameMap.delete(removed.userId)
     }
   }
   return buf.messages.length
@@ -39,6 +51,10 @@ export function getMessages(channelId: string): BufferedMessage[] {
 
 export function getUserMap(channelId: string): Map<string, string> {
   return buffers.get(channelId)?.userMap ?? new Map()
+}
+
+export function getUsernameMap(channelId: string): Map<string, string> {
+  return buffers.get(channelId)?.usernameMap ?? new Map()
 }
 
 export function clearBuffer(channelId: string): void {

@@ -87,6 +87,7 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
           message.channelId,
           message.author.id,
           message.member?.displayName ?? message.author.displayName,
+          message.author.username,
           msgContent
         )
         maybeExtractFromBuffer(message.channelId, client.user?.id)
@@ -97,6 +98,7 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
 
     const channelId = message.channelId
     const displayName = message.member?.displayName ?? message.author.displayName
+    const username = message.author.username
 
     let content = message.content.replace(/<@!?\d+>/g, '').trim()
 
@@ -263,6 +265,7 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
         channelId,
         userMessage: content || '(shared an image)',
         displayName,
+        username,
         userId: message.author.id,
         imageAttachments: imageAttachments.length > 0 ? imageAttachments : undefined
       })
@@ -282,7 +285,7 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
       // Add bot response to passive buffer for richer extraction context
       if (message.guild && client.user && isMonitored(channelId)) {
         const botName = message.guild.members.me?.displayName ?? client.user.displayName
-        addToPassiveBuffer(channelId, client.user.id, botName, responseText)
+        addToPassiveBuffer(channelId, client.user.id, botName, client.user.username, responseText)
         maybeExtractFromBuffer(channelId, client.user.id)
       }
     } catch (error) {

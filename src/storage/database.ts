@@ -115,10 +115,13 @@ export function getDb(): Database.Database {
 
 /** Run forward-only schema migrations */
 function runMigrations(database: Database.Database): void {
-  // Add user_id column to session_history (nullable for existing rows)
   const columns = database.prepare("PRAGMA table_info('session_history')").all() as Array<{ name: string }>
-  if (!columns.some((c) => c.name === 'user_id')) {
+  const colNames = new Set(columns.map((c) => c.name))
+  if (!colNames.has('user_id')) {
     database.exec("ALTER TABLE session_history ADD COLUMN user_id TEXT DEFAULT NULL")
+  }
+  if (!colNames.has('username')) {
+    database.exec("ALTER TABLE session_history ADD COLUMN username TEXT DEFAULT NULL")
   }
 }
 

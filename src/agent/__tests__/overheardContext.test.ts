@@ -11,7 +11,7 @@ describe('overheard context (passive buffer persistence)', () => {
   it('buffer retains messages after extraction triggers', () => {
     // Fill buffer with 12 messages (exceeds extractionInterval of 10)
     for (let i = 0; i < 12; i++) {
-      addMessage('ch-1', `user-${i % 3}`, `User${i % 3}`, `message ${i}`)
+      addMessage('ch-1', `user-${i % 3}`, `User${i % 3}`, `user${i % 3}`, `message ${i}`)
     }
 
     // Trigger extraction counting (each call increments internal counter)
@@ -29,7 +29,7 @@ describe('overheard context (passive buffer persistence)', () => {
   it('buffer caps at bufferSize via FIFO eviction', () => {
     // Add 25 messages to exceed buffer size of 20
     for (let i = 0; i < 25; i++) {
-      addMessage('ch-2', 'user-1', 'Alice', `msg ${i}`)
+      addMessage('ch-2', 'user-1', 'Alice', 'alice', `msg ${i}`)
     }
 
     const messages = getMessages('ch-2')
@@ -40,9 +40,9 @@ describe('overheard context (passive buffer persistence)', () => {
   })
 
   it('overheard context format matches expected prompt structure', () => {
-    addMessage('ch-3', 'user-a', 'Alice', 'anyone wanna play maimai?')
-    addMessage('ch-3', 'user-b', 'Bob', 'sure, after dinner')
-    addMessage('ch-3', 'user-a', 'Alice', 'cool, 8pm?')
+    addMessage('ch-3', 'user-a', 'Alice', 'alice', 'anyone wanna play maimai?')
+    addMessage('ch-3', 'user-b', 'Bob', 'bob', 'sure, after dinner')
+    addMessage('ch-3', 'user-a', 'Alice', 'alice', 'cool, 8pm?')
 
     const messages = getMessages('ch-3')
     const overheardText = messages.map((m) => `[${m.displayName}]: ${m.content}`).join('\n')

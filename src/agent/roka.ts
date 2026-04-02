@@ -13,9 +13,9 @@ import type { WindowMessage } from '../session/types.js'
 import { config } from '../config.js'
 import { getLocalHour } from '../utils/timezone.js'
 import { rokaTools } from './tools/index.js'
-import { saveMessage, loadHistory, getUserIdMap } from '../storage/sessionStore.js'
+import { saveMessage, loadHistory, getChannelUsers } from '../storage/sessionStore.js'
 import { getAllFactsForPrompt, refreshFactTimestamps } from '../storage/userMemory.js'
-import { getMessages as getBufferMessages, getUserMap as getBufferUserMap } from './passiveBuffer.js'
+import { getMessages as getBufferMessages, getUsernameMap as getBufferUsernameMap } from './passiveBuffer.js'
 
 export interface ImageAttachment {
   url: string
@@ -26,6 +26,7 @@ interface GenerateOptions {
   channelId: string
   userMessage: string
   displayName: string
+  username: string
   userId: string
   imageAttachments?: ImageAttachment[]
 }
@@ -282,7 +283,7 @@ function eventsToWindowMessages(events: Event[]): WindowMessage[] {
  * @returns Response text and detected tone
  */
 export async function generateResponse(options: GenerateOptions): Promise<GenerateResult> {
-  const { channelId, userMessage, displayName, userId, imageAttachments } = options
+  const { channelId, userMessage, displayName, username, userId, imageAttachments } = options
 
   toolCallsThisRequest = []
 
@@ -299,18 +300,22 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
   let systemPrompt = assembleSystemPrompt({ tone, participants, hour, displayName })
 
   try {
-    // Collect all known users from session history + passive buffer + current speaker
-    const historyUsers = getUserIdMap(channelId, config.session.windowSize)
-    const bufferUsers = getBufferUserMap(channelId)
-    const allUsers = new Map<string, string>(historyUsers)
-    for (const [name, uid] of bufferUsers) allUsers.set(name, uid)
-    allUsers.set(displayName, userId)
+    // Collect all known users keyed by userId: session history + passive buffer + current speaker
+    const allUsers = getChannelUsers(channelId, config.session.windowSize)
+    const bufferUsernames = getBufferUsernameMap(channelId)
+    for (const [uid, uname] of bufferUsernames) {
+      if (!allUsers.has(uid)) allUsers.set(uid, { userId: uid, displayName: uname, username: uname })
+    }
+    allUsers.set(userId, { userId, displayName, username })
 
     const factLines: string[] = []
-    for (const [name, uid] of allUsers) {
+    for (const [uid, user] of allUsers) {
       const facts = getAllFactsForPrompt(uid)
       if (facts) {
-        factLines.push(`- ${name}: ${facts}`)
+        const label = user.username && user.username !== user.displayName
+          ? `${user.username} (${user.displayName})`
+          : user.displayName
+        factLines.push(`- ${label}: ${facts}`)
         refreshFactTimestamps(uid)
       }
     }
@@ -422,7 +427,7 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
 
       if (!KNOWN_FALLBACKS.has(responseText)) {
         try {
-          saveMessage(channelId, 'user', displayName, userMessage, userId)
+          saveMessage(channelId, 'user', displayName, userMessage, userId, username)
           saveMessage(channelId, 'assistant', 'Roka', responseText)
         } catch (error) {
           logger.warn({ channelId, error }, 'Failed to persist messages to SQLite')

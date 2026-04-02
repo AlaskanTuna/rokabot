@@ -182,41 +182,16 @@ SQLite tables:
 <details>
 <summary><strong>Tone Detection</strong></summary>
 
-The tone detector evaluates the last 3 user messages against priority-ordered regular expressions, requiring at least 2 pattern matches to trigger a specific tone (zero LLM cost). The `sleepy` tone has a special late-night trigger (22:00-04:00) that lowers the threshold to 1 match. Falls back to playful if no thresholds are met.
+Rule-based keyword matching on the last 3 user messages (zero LLM cost). 12 tones with priority-ordered regex patterns — needs 2+ matches to trigger, falls back to playful. Each tone has a unique accent color and expression pool (33 expressions total). The `sleepy` tone has a special late-night trigger (22:00-04:00).
 
-```mermaid
-flowchart LR
-    Input(["Last 3 user messages"]) --> Scan["Regex scan\n(needs 2+ matches)"]
-    Scan --> P1{Flustered?}
-    P1 -->|Yes| R1([Flustered])
-    P1 -->|No| P2{Tender?}
-    P2 -->|Yes| R2([Tender])
-    P2 -->|No| P3{Annoyed?}
-    P3 -->|Yes| R3([Annoyed])
-    P3 -->|No| P4{Sleepy?}
-    P4 -->|"Yes (or 1 match + late night)"| R4([Sleepy])
-    P4 -->|No| P5{... priority cascade}
-    P5 --> P11{Confident?}
-    P11 -->|Yes| R11([Confident])
-    P11 -->|No| Default([Playful])
-```
-
-| Tone        | Color                | Expression Pool                           | Trigger                        |
-| ----------- | -------------------- | ----------------------------------------- | ------------------------------ |
-| Playful     | `#FFB3D9` pink       | smile, cheerful                           | Default fallback               |
-| Sincere     | `#A8D8FF` blue       | sad, pained, sorrowful                    | Emotional keywords             |
-| Domestic    | `#FFD4B5` peach      | content, gentle smile, relieved           | Food/cooking/home keywords     |
-| Flustered   | `#FFB3B3` red        | flustered, nervous, awkward               | Romantic keywords              |
-| Curious     | `#B2EBF2` cyan       | thinking, surprised, blank stare          | Question words                 |
-| Annoyed     | `#F8B4B8` rose       | exasperated, dissatisfied, dissatisfied 2 | Defiance/recklessness keywords |
-| Tender      | `#E1BEE7` lavender   | worried, troubled, anxious                | Soft vulnerability keywords    |
-| Confident   | `#C8E6C9` mint       | composed, base, explaining                | Help/advice/trust keywords     |
-| Nostalgic   | `#D4A574` amber      | melancholy, downcast, somber              | Memory/past keywords           |
-| Mischievous | `#FFD700` gold       | delighted, attentive                      | Scheming/prank keywords        |
-| Sleepy      | `#B0C4DE` steel blue | serene, resigned                          | Sleep keywords + late night    |
-| Competitive | `#FF6B6B` fiery red  | frustrated, dissatisfied 3, uncertain     | Game/challenge keywords        |
-
-All 33 character expressions are assigned uniquely across tones — no expression appears in more than one pool.
+| Tone | Color | Tone | Color |
+|------|-------|------|-------|
+| Playful | `#FFB3D9` pink | Confident | `#C8E6C9` mint |
+| Sincere | `#A8D8FF` blue | Nostalgic | `#D4A574` amber |
+| Domestic | `#FFD4B5` peach | Mischievous | `#FFD700` gold |
+| Flustered | `#FFB3B3` red | Sleepy | `#B0C4DE` steel blue |
+| Curious | `#B2EBF2` cyan | Competitive | `#FF6B6B` fiery red |
+| Annoyed | `#F8B4B8` rose | Tender | `#E1BEE7` lavender |
 
 </details>
 
@@ -251,65 +226,31 @@ flowchart TD
 
 **How it works:**
 
-- **Active channel monitoring**: Channels where Roka has been @mentioned in the last 24h are "monitored." All messages in monitored channels (including bot responses) flow into a passive in-memory ring buffer — no SQLite writes, no LLM calls.
-- **Background extraction**: Every 10 messages, a background Gemini call fires with a focused extraction prompt. This extracts facts for ALL users in the window — not just the current speaker. The buffer is never cleared; it's a true FIFO ring that naturally evicts old messages.
-- **Overheard context**: When responding, the last 10 messages from the passive buffer are injected into the system prompt as "Recent Channel Activity." This gives Roka awareness of conversations she wasn't directly part of.
-- **Prompt injection**: When a user @mentions Roka, their stored facts are fetched and appended to the system prompt (~50-100 tokens). Timestamps are refreshed on access so active facts don't expire.
-- **Explicit tools**: `remember_user` and `recall_user` ADK tools are still available for direct requests.
-- **Retention**: Facts are capped at 20 per user (oldest evicted). Facts older than 90 days without access are auto-pruned daily. Refresh-on-access keeps active facts alive.
+- **Active channel monitoring**: Channels where Roka has been @mentioned in the last 24h are "monitored." All messages flow into a passive in-memory FIFO ring buffer.
+- **Background extraction**: Every 10 messages, a background Gemini call extracts facts for all users in the window. The buffer is never cleared — old messages naturally evict.
+- **Overheard context**: Last 10 buffer messages are injected into the system prompt as "Recent Channel Activity" so Roka is aware of nearby conversation.
+- **Cross-server identity**: Users are tracked by immutable Discord username alongside server-specific display names. Facts are labeled as `username (DisplayName)` in the prompt so the LLM can match regardless of which name is used. Mappings are persisted in session history and backfilled automatically.
+- **Multi-user prompt injection**: Facts for ALL known channel participants are loaded into the prompt — not just the current speaker. Users are resolved from session history, passive buffer, and the current interaction.
+- **Retention**: 20 facts per user (oldest evicted), 90-day TTL with refresh-on-access, daily pruning.
 
 | Aspect             | Detail                                                                 |
 | ------------------ | ---------------------------------------------------------------------- |
 | Storage            | SQLite `user_memory` table (user_id, fact_key, fact_value, updated_at) |
 | Cap                | 20 facts per user, oldest evicted on overflow                          |
+| Identity           | Tracked by Discord username (immutable, cross-server)                  |
 | Passive monitoring | 20-message FIFO ring buffer in monitored channels (in-memory only)     |
 | Overheard context  | Last 10 buffer messages injected into system prompt per request        |
 | Extraction trigger | Every 10 messages, background Gemini call (~1 extra RPM per 10 msgs)   |
 | Channel monitoring | Auto-activated on @mention, 24h TTL refreshed on each new @mention     |
 | Fact retention     | 90-day TTL with refresh-on-access; daily pruning job                   |
-| Deduplication      | Skips saving if identical key+value already exists                     |
-| Bot self-filter    | Facts about the bot itself are automatically skipped                   |
+| Deduplication      | Skips identical key+value; skips facts about the bot itself            |
 
 </details>
 
 <details>
 <summary><strong>Passive Emoji Reactions</strong></summary>
 
-Roka passively reacts to messages with contextually appropriate emoji, even when not directly addressed. This runs on every guild message with zero LLM cost — purely rule-based keyword matching with a probability gate and cooldown.
-
-```mermaid
-flowchart LR
-    Msg([Guild message]) --> Bot{From bot?}
-    Bot -->|Yes| Skip([Ignore])
-    Bot -->|No| Cooldown{Channel on\ncooldown?}
-    Cooldown -->|Yes| Skip
-    Cooldown -->|No| Match["Match content\nagainst 7 rule categories"]
-    Match --> Hit{Rule matched?}
-    Hit -->|No| Skip
-    Hit -->|Yes| Prob{"Random < 33%?"}
-    Prob -->|No| Skip
-    Prob -->|Yes| React["React with emoji\n(fire-and-forget)"]
-    React --> SetCD["Set 60s cooldown\nfor channel"]
-```
-
-**Reaction rules** (checked in priority order):
-
-| Category    | Keywords                                             | Emoji Pool     |
-| ----------- | ---------------------------------------------------- | -------------- |
-| Compliments | cute, pretty, beautiful, best girl, adorable, lovely | `💕`           |
-| Greetings   | good morning, ohayo, hello, konnichiwa, tadaima      | `👋`           |
-| Goodnight   | goodnight, oyasumi, going to sleep, good night       | `🌙`           |
-| Sadness     | sad, lonely, crying, feel bad, depressed             | `🫂`           |
-| Food        | cook, recipe, hungry, eat, delicious, food, dinner   | `🍳` `🍵` `🍙` |
-| Anime       | anime, manga, otaku, waifu, sensei, kawaii           | `✨` `🌸`      |
-| Excitement  | let's go, woohoo, amazing, awesome, yay, congrats    | `🎉` `✨`      |
-
-**Safeguards:**
-
-- **Probability gate**: only 33% chance of reacting even when a rule matches
-- **Cooldown**: max 1 reaction per channel per 60 seconds
-- **Bot-aware**: never reacts to bot messages
-- **Non-blocking**: reactions are fire-and-forget, never delay message handling
+Rule-based keyword matching with a probability gate and per-channel cooldown. Zero LLM cost. 7 categories (compliments, greetings, goodnight, sadness, food, anime, excitement) with contextual emoji pools. 33% reaction probability, configurable cooldown, fire-and-forget.
 
 </details>
 
@@ -392,19 +333,8 @@ rokabot/
 │   │   │   ├── speech.ts              # Layer 1: Speech patterns & formatting rules
 │   │   │   ├── tones.ts               # Layer 2: Tone variants (12 moods)
 │   │   │   └── context.ts             # Layer 3: Dynamic context (time, participants)
-│   │   └── tools/
-│   │       ├── index.ts               # ADK FunctionTool declarations (Zod schemas)
-│   │       ├── rollDice.ts            # NdM dice roller
-│   │       ├── flipCoin.ts            # Coin flip
-│   │       ├── getCurrentTime.ts      # Timezone-aware clock
-│   │       ├── searchAnime.ts         # Jikan anime search (sort, filter, limit)
-│   │       ├── getAnimeSchedule.ts    # Jikan schedule (day/week/season scope)
-│   │       ├── getWeather.ts          # Open-Meteo weather lookup
-│   │       ├── searchWeb.ts           # Tavily web search (fallback)
-│   │       ├── rememberUser.ts        # Remember a fact about a user (SQLite)
-│   │       ├── recallUser.ts          # Recall stored facts about a user (SQLite)
-│   │       ├── setReminder.ts         # Set a timed reminder for a user (SQLite)
-│   │       └── jikanThrottle.ts       # Jikan API rate limiter (3 req/s)
+│   │   └── tools/                     # 10 ADK FunctionTools (dice, coin, time, anime,
+│   │       └── ...                    #   schedule, weather, web search, memory, reminders)
 │   ├── discord/
 │   │   ├── client.ts                  # discord.js client setup (intents, partials)
 │   │   ├── concurrency.ts             # Per-channel concurrency guard
