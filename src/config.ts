@@ -27,6 +27,7 @@ interface YamlConfig {
   discord?: { maxMessageLength?: number }
   memory?: {
     bufferSize?: number
+    contextSize?: number
     extractionInterval?: number
     extractionGapMs?: number
     maxFactsPerUser?: number
@@ -102,6 +103,7 @@ export const config = {
   },
   memory: {
     bufferSize: yaml.memory?.bufferSize ?? 20,
+    contextSize: yaml.memory?.contextSize ?? 10,
     extractionInterval: yaml.memory?.extractionInterval ?? 20,
     extractionGapMs: yaml.memory?.extractionGapMs ?? 10_000,
     maxFactsPerUser: yaml.memory?.maxFactsPerUser ?? 10,

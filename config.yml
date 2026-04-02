@@ -23,6 +23,7 @@ discord:
 
 memory:
   bufferSize: 20
+  contextSize: 10
   extractionInterval: 10
   extractionGapMs: 10000
   maxFactsPerUser: 20

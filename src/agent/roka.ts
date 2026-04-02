@@ -308,7 +308,7 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
     logger.warn({ userId, error }, 'Failed to load user memory for prompt injection')
   }
 
-  const overheard = getBufferMessages(channelId)
+  const overheard = getBufferMessages(channelId).slice(-config.memory.contextSize)
   if (overheard.length > 0) {
     const overheardText = overheard.map((m) => `[${m.displayName}]: ${m.content}`).join('\n')
     systemPrompt += `\n\n## Recent Channel Activity (messages you overheard)\n${overheardText}`

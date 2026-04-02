@@ -75,6 +75,7 @@ describe('config module', () => {
 
     // Memory
     expect(config.memory.bufferSize).toBe(20)
+    expect(config.memory.contextSize).toBe(10)
     expect(config.memory.extractionInterval).toBe(10)
     expect(config.memory.extractionGapMs).toBe(10_000)
     expect(config.memory.maxFactsPerUser).toBe(20)
