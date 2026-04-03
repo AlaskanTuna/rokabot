@@ -33,11 +33,15 @@ export function saveFact(guildId: string, userId: string, key: string, value: st
   ).run(guildId, userId, key, value, Date.now())
 }
 
-/** Get all stored facts for a user in a guild */
+/** Get all stored facts for a user in a guild (falls back to 'global' for pre-migration facts) */
 export function getFacts(guildId: string, userId: string): Array<{ key: string; value: string }> {
   const db = getDb()
   const rows = db
-    .prepare('SELECT fact_key, fact_value FROM user_memory WHERE guild_id = ? AND user_id = ? ORDER BY updated_at DESC')
+    .prepare(
+      `SELECT fact_key, fact_value FROM user_memory
+       WHERE guild_id IN (?, 'global') AND user_id = ?
+       ORDER BY updated_at DESC`
+    )
     .all(guildId, userId) as Array<{ fact_key: string; fact_value: string }>
 
   return rows.map((row) => ({ key: row.fact_key, value: row.fact_value }))
@@ -65,10 +69,10 @@ export function countFacts(guildId: string, userId: string): number {
   return row.cnt
 }
 
-/** Touch updated_at for all facts of a user in a guild (refresh-on-access) */
+/** Touch updated_at for all facts of a user in a guild and global (refresh-on-access) */
 export function refreshFactTimestamps(guildId: string, userId: string): void {
   const db = getDb()
-  db.prepare('UPDATE user_memory SET updated_at = ? WHERE guild_id = ? AND user_id = ?').run(
+  db.prepare("UPDATE user_memory SET updated_at = ? WHERE guild_id IN (?, 'global') AND user_id = ?").run(
     Date.now(),
     guildId,
     userId
