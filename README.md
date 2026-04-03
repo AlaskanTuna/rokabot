@@ -23,12 +23,12 @@ Rokabot responds to `/chat` slash commands, @mentions, and replies with in-chara
 
 ## Features
 
-- **In-character roleplay** -- Maniwa Roka personality with 12 dynamic tones and Components V2 styled responses
-- **Channel-aware** -- passively monitors conversations, injects overheard context, and loads facts for all participants so Roka knows what's happening around her
-- **Per-user memory** -- background fact extraction with cross-server identity resolution via Discord username
-- **10 agent tools** -- dice, coin, clock, anime/schedule search, weather, web search, user memory, reminders
-- **3 mini-games** -- shiritori, buddy pets (18 species, 5 rarity tiers), hangman with leaderboards
-- **SQLite persistence** -- sessions, memory, reminders, and game scores survive restarts
+- **In-character roleplay**: Maniwa Roka personality with 12 dynamic tones and Components V2 styled responses.
+- **Channel-aware**: Passively monitors conversations, injects overheard context, and loads facts for all participants so Roka knows what's happening around her.
+- **Per-user memory**: Background fact extraction with cross-server identity resolution via Discord username.
+- **10 agent tools**: Dice, coin, clock, anime/schedule search, weather, web search, user memory, reminders.
+- **3 mini-games**: Shiritori, buddy pets (18 species, 5 rarity tiers), hangman with leaderboards.
+- **SQLite persistence**: Sessions, memory, reminders, and game scores survive restarts.
 
 ---
 
@@ -131,12 +131,12 @@ flowchart TD
     Overheard["Overheard Context\n(last 10 channel messages)"] -->|appended if monitored| Combine
 ```
 
-- **Layer 0 (Core)** -- personality, background, behavioral rules, abilities
-- **Layer 1 (Speech)** -- formatting rules, speech patterns, response length
-- **Layer 2 (Tone)** -- one of 12 tone variants selected by the tone detector
-- **Layer 3 (Context)** -- time of day, participant names, current user
-- **User Facts** -- facts for all known channel participants, labeled as `username (DisplayName)` for cross-server identity
-- **Overheard Context** -- last 10 messages from the passive buffer so Roka knows what's happening around her
+- **Layer 0 (Core)**: Personality, background, behavioral rules, abilities.
+- **Layer 1 (Speech)**: Formatting rules, speech patterns, response length.
+- **Layer 2 (Tone)**: One of 12 tone variants selected by the tone detector.
+- **Layer 3 (Context)**: Time of day, participant names, current user.
+- **User Facts**: Facts for all known channel participants, labeled as `username (DisplayName)` for cross-server identity.
+- **Overheard Context**: Last 10 messages from the passive buffer so Roka knows what's happening around her.
 
 </details>
 
@@ -190,22 +190,22 @@ flowchart TD
     Rehydrate -->|"ADK session\nevents"| Prompt
 ```
 
-**Session persistence** -- @mention interactions and bot responses are saved to `session_history` with userId and username. On cold start, up to 20 messages are rehydrated (max 2h age to prevent stale context contamination). Sessions idle-timeout and auto-destroy.
+**Session persistence**: @mention interactions and bot responses are saved to `session_history` with userId and username. On cold start, up to 20 messages are rehydrated (max 2h age to prevent stale context contamination). Sessions idle-timeout and auto-destroy.
 
-**Passive buffer** -- All messages in monitored channels flow into a 20-message in-memory FIFO ring (never cleared). Serves two purposes: overheard context injection (last 10 messages into the system prompt) and feeding the background fact extractor. Also persists `userId → username + displayName` mappings to SQLite for cross-server identity resolution.
+**Passive buffer**: All messages in monitored channels flow into a 20-message in-memory **FIFO ring**. Serves two purposes: overheard context injection (last 10 messages into the system prompt) and feeding the background fact extractor. Also persists `userId → username + displayName` mappings to SQLite for cross-server identity resolution.
 
-**Fact extraction** -- Every 10 messages, a background Gemini call extracts personal facts (interests, habits, preferences, identity) for all users in the buffer. Facts are stored by userId, labeled by username in the prompt, capped at 20 per user with 90-day retention.
+**Fact extraction**: Every 10 messages, a background Gemini call extracts personal facts (interests, habits, preferences, identity) for all users in the buffer. Facts are stored by userId, labeled by username in the prompt.
 
-**Prompt injection** -- When responding, ALL known users' facts are loaded (not just the current speaker), resolved from `user_names` table + `session_history` + current interaction. Labeled as `username (DisplayName)` for cross-server matching.
+**Prompt injection**: When responding, ALL known users' facts are loaded (not just the current speaker), resolved from `user_names` table + `session_history` + current interaction. Labeled as `username (DisplayName)` for cross-server matching.
 
-| SQLite Table       | Purpose                                             |
-| ------------------ | --------------------------------------------------- |
-| `session_history`  | Conversation messages with userId/username for rehydration |
-| `user_memory`      | Per-user facts (max 20 per user, 90-day TTL)        |
-| `user_names`       | Persistent userId → username + displayName mappings  |
-| `reminders`        | Scheduled reminders with delivery tracking          |
-| `game_scores`      | Shiritori and hangman scores                        |
-| `buddy`            | Per-user companion spirit data and stats            |
+| SQLite Table      | Purpose                                                    |
+| ----------------- | ---------------------------------------------------------- |
+| `session_history` | Conversation messages with userId/username for rehydration |
+| `user_memory`     | Per-user facts                                             |
+| `user_names`      | Persistent userId → username + displayName mappings        |
+| `reminders`       | Scheduled reminders with delivery tracking                 |
+| `game_scores`     | Shiritori and hangman scores                               |
+| `buddy`           | Per-user companion spirit data and stats                   |
 
 </details>
 
@@ -214,14 +214,14 @@ flowchart TD
 
 Rule-based keyword matching on the last 3 user messages (zero LLM cost). 12 tones with priority-ordered regex patterns — needs 2+ matches to trigger, falls back to playful. Each tone has a unique accent color and expression pool (33 expressions total). The `sleepy` tone has a special late-night trigger (22:00-04:00).
 
-| Tone | Color | Tone | Color |
-|------|-------|------|-------|
-| Playful | `#FFB3D9` pink | Confident | `#C8E6C9` mint |
-| Sincere | `#A8D8FF` blue | Nostalgic | `#D4A574` amber |
-| Domestic | `#FFD4B5` peach | Mischievous | `#FFD700` gold |
-| Flustered | `#FFB3B3` red | Sleepy | `#B0C4DE` steel blue |
-| Curious | `#B2EBF2` cyan | Competitive | `#FF6B6B` fiery red |
-| Annoyed | `#F8B4B8` rose | Tender | `#E1BEE7` lavender |
+| Tone      | Color           | Tone        | Color                |
+| --------- | --------------- | ----------- | -------------------- |
+| Playful   | `#FFB3D9` pink  | Confident   | `#C8E6C9` mint       |
+| Sincere   | `#A8D8FF` blue  | Nostalgic   | `#D4A574` amber      |
+| Domestic  | `#FFD4B5` peach | Mischievous | `#FFD700` gold       |
+| Flustered | `#FFB3B3` red   | Sleepy      | `#B0C4DE` steel blue |
+| Curious   | `#B2EBF2` cyan  | Competitive | `#FF6B6B` fiery red  |
+| Annoyed   | `#F8B4B8` rose  | Tender      | `#E1BEE7` lavender   |
 
 </details>
 
@@ -255,9 +255,9 @@ flowchart TD
 | Buddy Pets | `/gacha`     | Hatch a deterministic VN companion spirit with 18 species across 5 rarity tiers and 5 stats.                  |
 | Hangman    | `/hangman`   | Classic word guessing with ~120 anime/VN/Japanese-culture terms. 6 lives, emoji gallows art.                  |
 
-- Buddy pets can also be triggered via @mention with keywords: `gacha`, `draw`, `buddy`, `hatch`
-- Shiritori and hangman have 120-second auto-timeout per turn
-- Scores persist to SQLite across restarts
+- Buddy pets can also be triggered via @mention with keywords: `gacha`, `draw`, `buddy`, `hatch`.
+- Shiritori and hangman have 120-second auto-timeout per turn.
+- Scores persist to SQLite across restarts.
 
 </details>
 
@@ -460,38 +460,38 @@ docker compose up -d
 
 Secrets live in `.env`, tunables live in `config.yml`.
 
-| YAML Path                      | Env Override                 | Default                         | Description                                        |
-| ------------------------------ | ---------------------------- | ------------------------------- | -------------------------------------------------- |
-| `gemini.model`                 | `GEMINI_MODEL`               | `gemini-3.1-flash-lite-preview` | Gemini model ID                                    |
-| `gemini.timeout`               | `GEMINI_TIMEOUT`             | `25000`                         | API request timeout (ms)                           |
-| `gemini.maxRetries`            | `GEMINI_MAX_RETRIES`         | `3`                             | Max retries for transient errors (429, 500, 503)   |
-| `gemini.maxOutputTokens`       | `GEMINI_MAX_OUTPUT_TOKENS`   | `500`                           | Max tokens per response                            |
-| `gemini.baseRetryDelay`        | --                           | `2000`                          | Initial retry delay in ms (doubles each retry)     |
-| `gemini.maxLlmCalls`           | --                           | `4`                             | Max chained tool calls per request                 |
-| `rateLimit.rpm`                | `RATE_LIMIT_RPM`             | `15`                            | Requests per minute                                |
-| `rateLimit.rpd`                | `RATE_LIMIT_RPD`             | `500`                           | Requests per day                                   |
-| `session.ttl`                  | `SESSION_TTL_MS`             | `500000`                        | Idle session TTL (ms)                              |
-| `session.windowSize`           | `SESSION_WINDOW_SIZE`        | `20`                            | Max messages in ADK session history                |
-| `discord.maxMessageLength`     | `DISCORD_MAX_MESSAGE_LENGTH` | `1500`                          | Bot reply char limit                               |
-| `memory.bufferSize`            | --                           | `20`                            | Passive ring buffer size per channel               |
-| `memory.contextSize`           | --                           | `10`                            | Overheard messages injected into system prompt      |
-| `memory.extractionInterval`    | --                           | `10`                            | Messages between fact extractions                  |
-| `memory.extractionGapMs`       | --                           | `10000`                         | Minimum ms between extractions (global)            |
-| `memory.maxFactsPerUser`       | --                           | `20`                            | Max stored facts per user                          |
-| `memory.factRetentionDays`     | --                           | `90`                            | Days before unused facts are pruned                |
-| `memory.channelMonitorTtlMs`   | --                           | `86400000`                      | Channel monitoring TTL after last @mention (24h)   |
-| `emoji.probability`            | --                           | `0.33`                          | Reaction probability when keyword matches          |
-| `emoji.cooldownMs`             | --                           | `180000`                        | Per-channel reaction cooldown (ms)                 |
-| `reminders.checkIntervalMs`    | --                           | `5000`                          | Reminder scheduler poll interval (ms)              |
-| `reminders.maxPerUser`         | --                           | `5`                             | Max active reminders per user                      |
-| `reminders.staleThresholdMs`   | --                           | `300000`                        | Auto-drop reminders older than this past due (ms)  |
-| `games.hangmanLives`           | --                           | `6`                             | Wrong guesses before game over                     |
-| `games.hangmanTimeoutMs`       | --                           | `60000`                         | Hangman inactivity timeout (ms)                    |
-| `games.shiritoriTimeoutMs`     | --                           | `60000`                         | Shiritori turn timeout (ms)                        |
-| `games.shinyChance`            | --                           | `0.01`                          | Shiny buddy pet hatch chance                       |
-| `statusCycleMs`                | --                           | `900000`                        | Bot status rotation interval (ms)                  |
-| `timezone`                     | `TZ`                         | --                              | IANA timezone (e.g. `Asia/Singapore`)              |
-| `logging.level`                | `LOG_LEVEL`                  | `info`                          | Log level (debug/info/warn/error)                  |
+| YAML Path                    | Env Override                 | Default                         | Description                                       |
+| ---------------------------- | ---------------------------- | ------------------------------- | ------------------------------------------------- |
+| `gemini.model`               | `GEMINI_MODEL`               | `gemini-3.1-flash-lite-preview` | Gemini model ID                                   |
+| `gemini.timeout`             | `GEMINI_TIMEOUT`             | `25000`                         | API request timeout (ms)                          |
+| `gemini.maxRetries`          | `GEMINI_MAX_RETRIES`         | `3`                             | Max retries for transient errors (429, 500, 503)  |
+| `gemini.maxOutputTokens`     | `GEMINI_MAX_OUTPUT_TOKENS`   | `500`                           | Max tokens per response                           |
+| `gemini.baseRetryDelay`      | --                           | `2000`                          | Initial retry delay in ms (doubles each retry)    |
+| `gemini.maxLlmCalls`         | --                           | `4`                             | Max chained tool calls per request                |
+| `rateLimit.rpm`              | `RATE_LIMIT_RPM`             | `15`                            | Requests per minute                               |
+| `rateLimit.rpd`              | `RATE_LIMIT_RPD`             | `500`                           | Requests per day                                  |
+| `session.ttl`                | `SESSION_TTL_MS`             | `500000`                        | Idle session TTL (ms)                             |
+| `session.windowSize`         | `SESSION_WINDOW_SIZE`        | `20`                            | Max messages in ADK session history               |
+| `discord.maxMessageLength`   | `DISCORD_MAX_MESSAGE_LENGTH` | `1500`                          | Bot reply char limit                              |
+| `memory.bufferSize`          | --                           | `20`                            | Passive ring buffer size per channel              |
+| `memory.contextSize`         | --                           | `10`                            | Overheard messages injected into system prompt    |
+| `memory.extractionInterval`  | --                           | `10`                            | Messages between fact extractions                 |
+| `memory.extractionGapMs`     | --                           | `10000`                         | Minimum ms between extractions (global)           |
+| `memory.maxFactsPerUser`     | --                           | `20`                            | Max stored facts per user                         |
+| `memory.factRetentionDays`   | --                           | `14`                            | Days before unused facts are pruned               |
+| `memory.channelMonitorTtlMs` | --                           | `86400000`                      | Channel monitoring TTL after last @mention (24h)  |
+| `emoji.probability`          | --                           | `0.33`                          | Reaction probability when keyword matches         |
+| `emoji.cooldownMs`           | --                           | `180000`                        | Per-channel reaction cooldown (ms)                |
+| `reminders.checkIntervalMs`  | --                           | `5000`                          | Reminder scheduler poll interval (ms)             |
+| `reminders.maxPerUser`       | --                           | `5`                             | Max active reminders per user                     |
+| `reminders.staleThresholdMs` | --                           | `300000`                        | Auto-drop reminders older than this past due (ms) |
+| `games.hangmanLives`         | --                           | `6`                             | Wrong guesses before game over                    |
+| `games.hangmanTimeoutMs`     | --                           | `60000`                         | Hangman inactivity timeout (ms)                   |
+| `games.shiritoriTimeoutMs`   | --                           | `60000`                         | Shiritori turn timeout (ms)                       |
+| `games.shinyChance`          | --                           | `0.01`                          | Shiny buddy pet hatch chance                      |
+| `statusCycleMs`              | --                           | `900000`                        | Bot status rotation interval (ms)                 |
+| `timezone`                   | `TZ`                         | --                              | IANA timezone (e.g. `Asia/Singapore`)             |
+| `logging.level`              | `LOG_LEVEL`                  | `info`                          | Log level (debug/info/warn/error)                 |
 
 ---
 
@@ -557,6 +557,20 @@ docker stats --no-stream
 # Deploy latest changes from GitHub
 cd ~/rokabot && git pull && docker compose up -d --build
 ```
+
+---
+
+## Data & Privacy
+
+Rokabot is self-hosted and open-source. All data stays on your own machine.
+
+- **What is stored**: conversation history (7-day retention), per-user facts extracted from public channel messages (configurable retention), Discord usernames/display names, reminders, and game scores. Everything lives in a local SQLite file (`data/rokabot.db`).
+- **What is NOT stored**: DMs, message attachments, or any data from channels where the bot hasn't been @mentioned.
+- **Third-party calls**: messages are sent to the Gemini API for response generation and fact extraction. No user data is sent elsewhere.
+- **No telemetry**: the bot does not phone home, collect analytics, or share data with the developer or any third party.
+- **User control**: users can ask the bot what it knows about them via the `recall_user` tool. Server operators have full access to the SQLite database and can delete any data at any time.
+
+If you deploy this bot, you are the sole data controller. Consider informing your server members that the bot passively monitors conversations in channels where it has been @mentioned.
 
 ---
 
