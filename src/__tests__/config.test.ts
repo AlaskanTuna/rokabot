@@ -80,7 +80,7 @@ describe('config module', () => {
     expect(config.memory.extractionInterval).toBe(10)
     expect(config.memory.extractionGapMs).toBe(10_000)
     expect(config.memory.maxFactsPerUser).toBe(20)
-    expect(config.memory.factRetentionDays).toBe(90)
+    expect(config.memory.factRetentionDays).toBe(14)
     expect(config.memory.channelMonitorTtlMs).toBe(86_400_000)
 
     // Emoji
