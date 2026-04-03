@@ -23,7 +23,7 @@
 
 <img align="left" src="assets/roka-sticker-1.png" alt="Roka serving drinks" width="100" />
 
-**Maniwa Roka** (馬庭 芦花) is a warm, gently teasing side character from [Senren\*Banka](https://vndb.org/v19073) (千恋＊万花). She's naturally falls into the onee-san role but her real charm is how much she deserves attention herself. Rokabot is a conversation-first multi-purpose bot that brings that energy to Discord and spreads love for side characters through in-character replies to **/slash commands**, **@mentions** and **replies**.
+**Maniwa Roka** (馬庭 芦花) is a warm, gently teasing onee-san role side character from [Senren\*Banka](https://vndb.org/v19073) (千恋＊万花). Rokabot is a conversation-first multi-purpose bot that brings that energy to Discord and spreads love for side characters through in-character replies to **/slash commands**, **@mentions** and **replies**.
 
 <img align="right" src="assets/roka-sticker-2.png" alt="Roka in casual outfit" width="80" />
 
