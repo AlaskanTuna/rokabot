@@ -64,6 +64,7 @@ export function createInteractionHandler(rateLimiter: RateLimiter, client?: Clie
     try {
       const { text: responseText, tone } = await generateResponse({
         channelId,
+        guildId: interaction.guildId ?? 'global',
         userMessage: message,
         displayName,
         username: interaction.user.username,

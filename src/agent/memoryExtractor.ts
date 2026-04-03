@@ -62,7 +62,7 @@ interface ExtractedFact {
 }
 
 /** Increment message counter and trigger extraction when threshold is reached */
-export function maybeExtractFromBuffer(channelId: string, botUserId?: string): void {
+export function maybeExtractFromBuffer(channelId: string, botUserId?: string, guildId?: string): void {
   const count = (messageCounts.get(channelId) ?? 0) + 1
   messageCounts.set(channelId, count)
 
@@ -80,13 +80,18 @@ export function maybeExtractFromBuffer(channelId: string, botUserId?: string): v
   const messages = [...getMessages(channelId)]
   logger.info({ channelId, messageCount: messages.length }, 'Extraction threshold reached, triggering memory extraction')
 
-  void runBufferExtraction(channelId, messages, botUserId).catch((error) => {
+  void runBufferExtraction(channelId, messages, botUserId, guildId).catch((error) => {
     logger.warn({ channelId, error }, 'Passive buffer memory extraction failed')
   })
 }
 
 /** Run extraction from the passive buffer messages */
-async function runBufferExtraction(channelId: string, messages: BufferedMessage[], botUserId?: string): Promise<void> {
+async function runBufferExtraction(
+  channelId: string,
+  messages: BufferedMessage[],
+  botUserId?: string,
+  guildId?: string
+): Promise<void> {
   const conversationText = messages.map((m) => `[${m.displayName}]: ${m.content}`).join('\n')
 
   if (!conversationText.trim()) return
@@ -128,10 +133,11 @@ async function runBufferExtraction(channelId: string, messages: BufferedMessage[
         continue
       }
       if (botUserId && resolvedUserId === botUserId) continue
-      const existingFacts = getFacts(resolvedUserId)
+      const effectiveGuildId = guildId ?? 'global'
+      const existingFacts = getFacts(effectiveGuildId, resolvedUserId)
       const alreadyExists = existingFacts.some((f) => f.key === fact.key && f.value === fact.value)
       if (!alreadyExists) {
-        saveFact(resolvedUserId, fact.key, fact.value)
+        saveFact(effectiveGuildId, resolvedUserId, fact.key, fact.value)
         savedCount++
       }
     }

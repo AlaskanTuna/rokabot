@@ -4,6 +4,7 @@ import { getFacts } from '../../storage/userMemory.js'
 
 export interface RecallUserParams {
   user_id: string
+  guild_id: string
 }
 
 export interface RecallUserResult {
@@ -12,8 +13,8 @@ export interface RecallUserResult {
 }
 
 export function recallUser(params: RecallUserParams): RecallUserResult {
-  const { user_id } = params
-  const facts = getFacts(user_id)
+  const { user_id, guild_id } = params
+  const facts = getFacts(guild_id, user_id)
 
   if (facts.length === 0) {
     return {

@@ -134,7 +134,8 @@ export const rememberUserTool = new FunctionTool({
   }),
   execute: async (input, toolContext) => {
     const userId = toolContext?.state?.get<string>('_userId') ?? 'unknown'
-    return rememberUser({ user_id: userId, fact_key: input.fact_key, fact_value: input.fact_value })
+    const guildId = toolContext?.state?.get<string>('_guildId') ?? 'global'
+    return rememberUser({ user_id: userId, guild_id: guildId, fact_key: input.fact_key, fact_value: input.fact_value })
   }
 })
 
@@ -145,7 +146,8 @@ export const recallUserTool = new FunctionTool({
   parameters: z.object({}),
   execute: async (_input, toolContext) => {
     const userId = toolContext?.state?.get<string>('_userId') ?? 'unknown'
-    return recallUser({ user_id: userId })
+    const guildId = toolContext?.state?.get<string>('_guildId') ?? 'global'
+    return recallUser({ user_id: userId, guild_id: guildId })
   }
 })
 

@@ -28,17 +28,20 @@ function createTestDb(): Database.Database {
   const db = new Database(':memory:')
   db.exec(`
     CREATE TABLE IF NOT EXISTS user_memory (
+      guild_id TEXT NOT NULL,
       user_id TEXT NOT NULL,
       fact_key TEXT NOT NULL,
       fact_value TEXT NOT NULL,
       updated_at INTEGER NOT NULL,
-      PRIMARY KEY (user_id, fact_key)
+      PRIMARY KEY (guild_id, user_id, fact_key)
     );
   `)
   return db
 }
 
 describe('userMemory', () => {
+  const G = 'test-guild'
+
   beforeEach(() => {
     testDb = createTestDb()
   })
@@ -49,7 +52,7 @@ describe('userMemory', () => {
 
   describe('saveFact', () => {
     it('inserts a new fact', () => {
-      saveFact('Alice', 'favorite_anime', 'Frieren')
+      saveFact(G, 'Alice', 'favorite_anime', 'Frieren')
 
       const rows = testDb.prepare('SELECT * FROM user_memory WHERE user_id = ?').all('Alice') as Array<{
         user_id: string
@@ -64,8 +67,8 @@ describe('userMemory', () => {
     })
 
     it('upserts an existing fact (same key updates value)', () => {
-      saveFact('Alice', 'favorite_anime', 'Frieren')
-      saveFact('Alice', 'favorite_anime', 'Steins;Gate')
+      saveFact(G, 'Alice', 'favorite_anime', 'Frieren')
+      saveFact(G, 'Alice', 'favorite_anime', 'Steins;Gate')
 
       const rows = testDb.prepare('SELECT * FROM user_memory WHERE user_id = ?').all('Alice') as Array<{
         fact_key: string
@@ -76,33 +79,33 @@ describe('userMemory', () => {
     })
 
     it('stores multiple facts for the same user', () => {
-      saveFact('Alice', 'favorite_anime', 'Frieren')
-      saveFact('Alice', 'nickname', 'Ali')
-      saveFact('Alice', 'hobby', 'cooking')
+      saveFact(G, 'Alice', 'favorite_anime', 'Frieren')
+      saveFact(G, 'Alice', 'nickname', 'Ali')
+      saveFact(G, 'Alice', 'hobby', 'cooking')
 
-      expect(countFacts('Alice')).toBe(3)
+      expect(countFacts(G, 'Alice')).toBe(3)
     })
 
     it('keeps facts from different users separate', () => {
-      saveFact('Alice', 'favorite_anime', 'Frieren')
-      saveFact('Bob', 'favorite_anime', 'One Piece')
+      saveFact(G, 'Alice', 'favorite_anime', 'Frieren')
+      saveFact(G, 'Bob', 'favorite_anime', 'One Piece')
 
-      expect(countFacts('Alice')).toBe(1)
-      expect(countFacts('Bob')).toBe(1)
+      expect(countFacts(G, 'Alice')).toBe(1)
+      expect(countFacts(G, 'Bob')).toBe(1)
     })
   })
 
   describe('getFacts', () => {
     it('returns empty array for unknown user', () => {
-      const facts = getFacts('nobody')
+      const facts = getFacts(G, 'nobody')
       expect(facts).toEqual([])
     })
 
     it('returns all facts for a user', () => {
-      saveFact('Alice', 'favorite_anime', 'Frieren')
-      saveFact('Alice', 'nickname', 'Ali')
+      saveFact(G, 'Alice', 'favorite_anime', 'Frieren')
+      saveFact(G, 'Alice', 'nickname', 'Ali')
 
-      const facts = getFacts('Alice')
+      const facts = getFacts(G, 'Alice')
       expect(facts).toHaveLength(2)
       expect(facts.map((f) => f.key)).toContain('favorite_anime')
       expect(facts.map((f) => f.key)).toContain('nickname')
@@ -111,16 +114,16 @@ describe('userMemory', () => {
     it('returns facts ordered by most recently updated first', () => {
       // Insert with explicit timestamps to control ordering
       testDb
-        .prepare('INSERT INTO user_memory (user_id, fact_key, fact_value, updated_at) VALUES (?, ?, ?, ?)')
-        .run('Alice', 'oldest', 'val1', 1000)
+        .prepare('INSERT INTO user_memory (guild_id, user_id, fact_key, fact_value, updated_at) VALUES (?, ?, ?, ?, ?)')
+        .run(G, 'Alice', 'oldest', 'val1', 1000)
       testDb
-        .prepare('INSERT INTO user_memory (user_id, fact_key, fact_value, updated_at) VALUES (?, ?, ?, ?)')
-        .run('Alice', 'newest', 'val2', 3000)
+        .prepare('INSERT INTO user_memory (guild_id, user_id, fact_key, fact_value, updated_at) VALUES (?, ?, ?, ?, ?)')
+        .run(G, 'Alice', 'newest', 'val2', 3000)
       testDb
-        .prepare('INSERT INTO user_memory (user_id, fact_key, fact_value, updated_at) VALUES (?, ?, ?, ?)')
-        .run('Alice', 'middle', 'val3', 2000)
+        .prepare('INSERT INTO user_memory (guild_id, user_id, fact_key, fact_value, updated_at) VALUES (?, ?, ?, ?, ?)')
+        .run(G, 'Alice', 'middle', 'val3', 2000)
 
-      const facts = getFacts('Alice')
+      const facts = getFacts(G, 'Alice')
       expect(facts[0].key).toBe('newest')
       expect(facts[1].key).toBe('middle')
       expect(facts[2].key).toBe('oldest')
@@ -129,50 +132,50 @@ describe('userMemory', () => {
 
   describe('deleteFact', () => {
     it('removes a specific fact', () => {
-      saveFact('Alice', 'favorite_anime', 'Frieren')
-      saveFact('Alice', 'nickname', 'Ali')
+      saveFact(G, 'Alice', 'favorite_anime', 'Frieren')
+      saveFact(G, 'Alice', 'nickname', 'Ali')
 
-      deleteFact('Alice', 'favorite_anime')
+      deleteFact(G, 'Alice', 'favorite_anime')
 
-      const facts = getFacts('Alice')
+      const facts = getFacts(G, 'Alice')
       expect(facts).toHaveLength(1)
       expect(facts[0].key).toBe('nickname')
     })
 
     it('does nothing when deleting a non-existent fact', () => {
-      expect(() => deleteFact('Alice', 'nonexistent')).not.toThrow()
+      expect(() => deleteFact(G, 'Alice', 'nonexistent')).not.toThrow()
     })
 
     it('does not affect other users', () => {
-      saveFact('Alice', 'hobby', 'cooking')
-      saveFact('Bob', 'hobby', 'gaming')
+      saveFact(G, 'Alice', 'hobby', 'cooking')
+      saveFact(G, 'Bob', 'hobby', 'gaming')
 
-      deleteFact('Alice', 'hobby')
+      deleteFact(G, 'Alice', 'hobby')
 
-      expect(getFacts('Alice')).toHaveLength(0)
-      expect(getFacts('Bob')).toHaveLength(1)
+      expect(getFacts(G, 'Alice')).toHaveLength(0)
+      expect(getFacts(G, 'Bob')).toHaveLength(1)
     })
   })
 
   describe('getAllFactsForPrompt', () => {
     it('returns empty string for unknown user', () => {
-      expect(getAllFactsForPrompt('nobody')).toBe('')
+      expect(getAllFactsForPrompt(G, 'nobody')).toBe('')
     })
 
     it('returns formatted string of facts', () => {
-      saveFact('Alice', 'favorite_anime', 'Frieren')
-      saveFact('Alice', 'nickname', 'Ali')
+      saveFact(G, 'Alice', 'favorite_anime', 'Frieren')
+      saveFact(G, 'Alice', 'nickname', 'Ali')
 
-      const result = getAllFactsForPrompt('Alice')
+      const result = getAllFactsForPrompt(G, 'Alice')
       expect(result).toContain('favorite_anime: Frieren')
       expect(result).toContain('nickname: Ali')
       expect(result).toContain(', ')
     })
 
     it('returns single fact without comma separator', () => {
-      saveFact('Alice', 'hobby', 'cooking')
+      saveFact(G, 'Alice', 'hobby', 'cooking')
 
-      const result = getAllFactsForPrompt('Alice')
+      const result = getAllFactsForPrompt(G, 'Alice')
       expect(result).toBe('hobby: cooking')
       expect(result).not.toContain(', ')
     })
@@ -180,15 +183,15 @@ describe('userMemory', () => {
 
   describe('countFacts', () => {
     it('returns 0 for unknown user', () => {
-      expect(countFacts('nobody')).toBe(0)
+      expect(countFacts(G, 'nobody')).toBe(0)
     })
 
     it('returns correct count', () => {
-      saveFact('Alice', 'a', '1')
-      saveFact('Alice', 'b', '2')
-      saveFact('Alice', 'c', '3')
+      saveFact(G, 'Alice', 'a', '1')
+      saveFact(G, 'Alice', 'b', '2')
+      saveFact(G, 'Alice', 'c', '3')
 
-      expect(countFacts('Alice')).toBe(3)
+      expect(countFacts(G, 'Alice')).toBe(3)
     })
   })
 
@@ -197,19 +200,19 @@ describe('userMemory', () => {
       // Insert 10 facts with explicit timestamps
       for (let i = 1; i <= 10; i++) {
         testDb
-          .prepare('INSERT INTO user_memory (user_id, fact_key, fact_value, updated_at) VALUES (?, ?, ?, ?)')
-          .run('Alice', `fact_${i}`, `value_${i}`, i * 1000)
+          .prepare('INSERT INTO user_memory (guild_id, user_id, fact_key, fact_value, updated_at) VALUES (?, ?, ?, ?, ?)')
+          .run(G, 'Alice', `fact_${i}`, `value_${i}`, i * 1000)
       }
 
-      expect(countFacts('Alice')).toBe(10)
+      expect(countFacts(G, 'Alice')).toBe(10)
 
       // Save an 11th fact — should evict fact_1 (oldest by updated_at)
-      saveFact('Alice', 'fact_11', 'value_11')
+      saveFact(G, 'Alice', 'fact_11', 'value_11')
 
-      expect(countFacts('Alice')).toBe(10)
+      expect(countFacts(G, 'Alice')).toBe(10)
 
       // fact_1 should be gone
-      const facts = getFacts('Alice')
+      const facts = getFacts(G, 'Alice')
       const keys = facts.map((f) => f.key)
       expect(keys).not.toContain('fact_1')
       expect(keys).toContain('fact_11')
@@ -219,16 +222,16 @@ describe('userMemory', () => {
     it('does not evict when updating an existing fact at the cap', () => {
       for (let i = 1; i <= 10; i++) {
         testDb
-          .prepare('INSERT INTO user_memory (user_id, fact_key, fact_value, updated_at) VALUES (?, ?, ?, ?)')
-          .run('Alice', `fact_${i}`, `value_${i}`, i * 1000)
+          .prepare('INSERT INTO user_memory (guild_id, user_id, fact_key, fact_value, updated_at) VALUES (?, ?, ?, ?, ?)')
+          .run(G, 'Alice', `fact_${i}`, `value_${i}`, i * 1000)
       }
 
       // Update an existing fact — should not evict anything
-      saveFact('Alice', 'fact_5', 'updated_value')
+      saveFact(G, 'Alice', 'fact_5', 'updated_value')
 
-      expect(countFacts('Alice')).toBe(10)
+      expect(countFacts(G, 'Alice')).toBe(10)
 
-      const facts = getFacts('Alice')
+      const facts = getFacts(G, 'Alice')
       const keys = facts.map((f) => f.key)
       expect(keys).toContain('fact_1')
       expect(keys).toContain('fact_5')
@@ -240,17 +243,17 @@ describe('userMemory', () => {
     it('evicts correctly across multiple insertions beyond the cap', () => {
       for (let i = 1; i <= 10; i++) {
         testDb
-          .prepare('INSERT INTO user_memory (user_id, fact_key, fact_value, updated_at) VALUES (?, ?, ?, ?)')
-          .run('Alice', `fact_${i}`, `value_${i}`, i * 1000)
+          .prepare('INSERT INTO user_memory (guild_id, user_id, fact_key, fact_value, updated_at) VALUES (?, ?, ?, ?, ?)')
+          .run(G, 'Alice', `fact_${i}`, `value_${i}`, i * 1000)
       }
 
       // Save 2 more facts — should evict fact_1 and fact_2
-      saveFact('Alice', 'fact_11', 'value_11')
-      saveFact('Alice', 'fact_12', 'value_12')
+      saveFact(G, 'Alice', 'fact_11', 'value_11')
+      saveFact(G, 'Alice', 'fact_12', 'value_12')
 
-      expect(countFacts('Alice')).toBe(10)
+      expect(countFacts(G, 'Alice')).toBe(10)
 
-      const facts = getFacts('Alice')
+      const facts = getFacts(G, 'Alice')
       const keys = facts.map((f) => f.key)
       expect(keys).not.toContain('fact_1')
       expect(keys).not.toContain('fact_2')

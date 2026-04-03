@@ -25,6 +25,7 @@ export interface ImageAttachment {
 
 interface GenerateOptions {
   channelId: string
+  guildId: string
   userMessage: string
   displayName: string
   username: string
@@ -284,7 +285,7 @@ function eventsToWindowMessages(events: Event[]): WindowMessage[] {
  * @returns Response text and detected tone
  */
 export async function generateResponse(options: GenerateOptions): Promise<GenerateResult> {
-  const { channelId, userMessage, displayName, username, userId, imageAttachments } = options
+  const { channelId, guildId, userMessage, displayName, username, userId, imageAttachments } = options
 
   toolCallsThisRequest = []
 
@@ -317,13 +318,13 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
 
     const factLines: string[] = []
     for (const [uid, user] of knownUsers) {
-      const facts = getAllFactsForPrompt(uid)
+      const facts = getAllFactsForPrompt(guildId, uid)
       if (facts) {
         const label = user.username !== user.displayName
           ? `${user.username} (${user.displayName})`
           : user.displayName
         factLines.push(`- ${label}: ${facts}`)
-        refreshFactTimestamps(uid)
+        refreshFactTimestamps(guildId, uid)
       }
     }
     if (factLines.length > 0) {
@@ -383,7 +384,7 @@ export async function generateResponse(options: GenerateOptions): Promise<Genera
           userId: channelId,
           sessionId: channelId,
           newMessage,
-          stateDelta: { _systemPrompt: systemPrompt, participants, _userId: userId, _channelId: channelId },
+          stateDelta: { _systemPrompt: systemPrompt, participants, _userId: userId, _channelId: channelId, _guildId: guildId },
           runConfig: { maxLlmCalls: config.gemini.maxLlmCalls }
         })) {
           if (abortController.signal.aborted) break

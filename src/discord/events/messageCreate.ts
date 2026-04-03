@@ -93,7 +93,7 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
           msgContent
         )
         upsertUserName(message.author.id, message.author.username, memberDisplayName)
-        maybeExtractFromBuffer(message.channelId, client.user?.id)
+        maybeExtractFromBuffer(message.channelId, client.user?.id, message.guildId ?? undefined)
       }
     }
 
@@ -266,6 +266,7 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
     try {
       const { text: responseText, tone } = await generateResponse({
         channelId,
+        guildId: message.guildId ?? 'global',
         userMessage: content || '(shared an image)',
         displayName,
         username,
@@ -289,7 +290,7 @@ export function createMessageHandler(client: Client, rateLimiter: RateLimiter) {
       if (message.guild && client.user && isMonitored(channelId)) {
         const botName = message.guild.members.me?.displayName ?? client.user.displayName
         addToPassiveBuffer(channelId, client.user.id, botName, client.user.username, responseText)
-        maybeExtractFromBuffer(channelId, client.user.id)
+        maybeExtractFromBuffer(channelId, client.user.id, message.guildId ?? undefined)
       }
     } catch (error) {
       if (isIgnorableDiscordError(error)) {

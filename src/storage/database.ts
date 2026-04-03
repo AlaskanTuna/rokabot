@@ -34,11 +34,12 @@ function createTables(database: Database.Database): void {
       ON session_history (channel_id, timestamp);
 
     CREATE TABLE IF NOT EXISTS user_memory (
+      guild_id TEXT NOT NULL,
       user_id TEXT NOT NULL,
       fact_key TEXT NOT NULL,
       fact_value TEXT NOT NULL,
       updated_at INTEGER NOT NULL,
-      PRIMARY KEY (user_id, fact_key)
+      PRIMARY KEY (guild_id, user_id, fact_key)
     );
 
     CREATE TABLE IF NOT EXISTS reminders (
@@ -122,13 +123,33 @@ export function getDb(): Database.Database {
 
 /** Run forward-only schema migrations */
 function runMigrations(database: Database.Database): void {
-  const columns = database.prepare("PRAGMA table_info('session_history')").all() as Array<{ name: string }>
-  const colNames = new Set(columns.map((c) => c.name))
-  if (!colNames.has('user_id')) {
+  // session_history: add user_id and username columns
+  const shCols = database.prepare("PRAGMA table_info('session_history')").all() as Array<{ name: string }>
+  const shColNames = new Set(shCols.map((c) => c.name))
+  if (!shColNames.has('user_id')) {
     database.exec("ALTER TABLE session_history ADD COLUMN user_id TEXT DEFAULT NULL")
   }
-  if (!colNames.has('username')) {
+  if (!shColNames.has('username')) {
     database.exec("ALTER TABLE session_history ADD COLUMN username TEXT DEFAULT NULL")
+  }
+
+  // user_memory: add guild_id to PK (requires table recreation)
+  const umCols = database.prepare("PRAGMA table_info('user_memory')").all() as Array<{ name: string }>
+  if (!umCols.some((c) => c.name === 'guild_id')) {
+    database.exec(`
+      CREATE TABLE user_memory_new (
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        fact_key TEXT NOT NULL,
+        fact_value TEXT NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (guild_id, user_id, fact_key)
+      );
+      INSERT INTO user_memory_new SELECT 'global', user_id, fact_key, fact_value, updated_at FROM user_memory;
+      DROP TABLE user_memory;
+      ALTER TABLE user_memory_new RENAME TO user_memory;
+    `)
+    logger.info('Migrated user_memory table to include guild_id')
   }
 }
 
