@@ -101,6 +101,11 @@ function createTables(database: Database.Database): void {
       display_name TEXT NOT NULL,
       updated_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS monitored_channels (
+      channel_id TEXT PRIMARY KEY,
+      expires_at INTEGER NOT NULL
+    );
   `)
 }
 

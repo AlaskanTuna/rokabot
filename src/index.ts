@@ -22,7 +22,7 @@ import { destroyAllSessions } from './agent/roka.js'
 import { closeDb, getDb } from './storage/database.js'
 import { pruneOldHistory } from './storage/sessionStore.js'
 import { pruneOldFacts } from './storage/userMemory.js'
-import { cleanupExpired } from './agent/channelMonitor.js'
+import { cleanupExpired, restoreMonitoredChannels } from './agent/channelMonitor.js'
 import { cleanupExpiredCooldowns } from './discord/emojiReactor.js'
 import { startReminderScheduler, stopReminderScheduler } from './discord/reminderScheduler.js'
 import { destroyAllGames as destroyAllShiritoriGames } from './games/shiritori.js'
@@ -32,6 +32,7 @@ const client = createClient()
 
 client.once('clientReady', () => {
   getDb()
+  restoreMonitoredChannels()
   startReminderScheduler(client)
 
   pruneOldHistory(config.session.historyRetentionDays)
