@@ -23,7 +23,7 @@ interface YamlConfig {
     maxLlmCalls?: number
   }
   rateLimit?: { rpm?: number; rpd?: number }
-  session?: { ttl?: number; windowSize?: number }
+  session?: { ttl?: number; windowSize?: number; maxRehydrationAge?: number }
   discord?: { maxMessageLength?: number }
   memory?: {
     bufferSize?: number
@@ -99,7 +99,8 @@ export const config = {
   },
   session: {
     ttlMs: envInt('SESSION_TTL_MS') ?? yaml.session?.ttl ?? 300_000,
-    windowSize: envInt('SESSION_WINDOW_SIZE') ?? yaml.session?.windowSize ?? 20
+    windowSize: envInt('SESSION_WINDOW_SIZE') ?? yaml.session?.windowSize ?? 20,
+    maxRehydrationAge: yaml.session?.maxRehydrationAge ?? 7_200_000
   },
   memory: {
     bufferSize: yaml.memory?.bufferSize ?? 20,

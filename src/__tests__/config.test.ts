@@ -71,6 +71,7 @@ describe('config module', () => {
     expect(config.rateLimit.rpd).toBe(500)
     expect(config.session.ttlMs).toBe(500_000)
     expect(config.session.windowSize).toBe(20)
+    expect(config.session.maxRehydrationAge).toBe(7_200_000)
     expect(config.discord.maxMessageLength).toBe(1500)
 
     // Memory

@@ -49,16 +49,17 @@ export function saveMessage(
  * @param limit - Maximum number of messages to return
  * @returns Array of WindowMessage ordered by timestamp ascending
  */
-export function loadHistory(channelId: string, limit: number): WindowMessage[] {
+export function loadHistory(channelId: string, limit: number, maxAgeMs?: number): WindowMessage[] {
   const db = getDb()
+  const cutoff = maxAgeMs ? Date.now() - maxAgeMs : 0
   const stmt = db.prepare(`
     SELECT role, display_name, content, timestamp
     FROM session_history
-    WHERE channel_id = ?
+    WHERE channel_id = ? AND timestamp >= ?
     ORDER BY timestamp DESC
     LIMIT ?
   `)
-  const rows = stmt.all(channelId, limit) as Array<{
+  const rows = stmt.all(channelId, cutoff, limit) as Array<{
     role: 'user' | 'assistant'
     display_name: string
     content: string

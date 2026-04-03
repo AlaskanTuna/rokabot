@@ -157,7 +157,7 @@ async function ensureSession(channelId: string) {
     logger.info({ channelId }, 'ADK session created')
 
     try {
-      const prior = loadHistory(channelId, config.session.windowSize)
+      const prior = loadHistory(channelId, config.session.windowSize, config.session.maxRehydrationAge)
       if (prior.length > 0) {
         for (const msg of prior) {
           const role = msg.role === 'user' ? 'user' : 'model'

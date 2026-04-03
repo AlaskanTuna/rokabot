@@ -15,8 +15,9 @@ rateLimit:
   rpd: 500  # Requests per day (Gemini free tier: 500)
 
 session:
-  ttl: 500000     # Idle session timeout in ms before ADK session is destroyed
-  windowSize: 20  # Max messages stored in ADK session history (rehydrated from SQLite)
+  ttl: 500000              # Idle session timeout in ms before ADK session is destroyed
+  windowSize: 20           # Max messages stored in ADK session history (rehydrated from SQLite)
+  maxRehydrationAge: 7200000  # Max age of messages to rehydrate in ms (2h, older messages are skipped)
 
 discord:
   maxMessageLength: 1500  # Char limit for bot replies (Discord max is 2000)
