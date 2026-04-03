@@ -21,16 +21,25 @@ function getClient(): GoogleGenAI {
 const EXTRACTION_PROMPT = `You are a fact extractor. Given a conversation, extract personal details and behavioral signals about the USERS (not the bot/assistant).
 
 Extract generously — even small or indirect clues count. Categories:
-- Identity: names, nicknames, age, gender, height, nationality, language spoken, location
-- Lifestyle: occupation, school, pets, daily routine, diet
+- Identity: nicknames, gender, height, nationality, language spoken
+- Lifestyle: pets, daily routine, diet
 - Interests: games, anime, music, shows, hobbies, sports, things they mention enjoying or disliking
 - Social: relationships, who they hang out with, friend groups, how they talk to others
 - Personality: humor style, catchphrases, recurring jokes, teasing habits, communication style
 - Opinions: strong likes/dislikes, preferences, things they recommend or complain about
 
+NEVER extract sensitive personal information:
+- Real names, full names, or legal names
+- Age, date of birth, or birthday
+- Home address, city, postal code, or specific location of residence
+- Phone numbers, email addresses, or social media handles
+- School or workplace names
+- Financial information, passwords, or credentials
+- Medical conditions or health details
+
 Guidelines:
-- Infer from context: "I just got home from work" → occupation is likely office worker
-- Capture opinions: "ugh I hate horror games" → dislikes horror games
+- Infer from context: "I just got home from work" → general_occupation: office worker (NOT the company name)
+- Capture opinions: "ugh I hate horror games" → dislikes: horror games
 - Capture habits: if someone always greets in Japanese → communication_style: uses Japanese greetings
 - SKIP momentary/temporary states that will be irrelevant tomorrow: "going to sleep", "going home", "feeling bored", "using Instagram right now", "experiencing a tech issue", current moods, what someone is doing at this exact moment
 - SKIP single-use reactions to the conversation itself
