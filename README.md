@@ -35,12 +35,12 @@ Rokabot will also respond with in-character dialogue powered by Gemini Flash Lit
 
 ## Features
 
-- **In-character roleplay**: Maniwa Roka personality with 12 dynamic tones and Components V2 styled responses.
-- **Channel-aware**: Passively monitors conversations, injects overheard context, and loads facts for all participants so Roka knows what's happening around her.
-- **Per-user memory**: Background fact extraction with cross-server identity resolution via Discord username.
-- **10 agent tools**: Dice, coin, clock, anime/schedule search, weather, web search, user memory, reminders.
-- **3 mini-games**: Shiritori, buddy pets (18 species, 5 rarity tiers), hangman with leaderboards.
-- **SQLite persistence**: Sessions, memory, reminders, and game scores survive restarts.
+- **In-Character Roleplay**: Maniwa Roka personality with 12 dynamic tones and Components V2 styled responses.
+- **Channel-Aware**: Passively monitors conversations, injects overheard context, and loads facts for all participants so Roka knows what's happening around her.
+- **Per-User Memory**: Background fact extraction with cross-server identity resolution via Discord username.
+- **10 Agent Tools**: Dice, coin, clock, anime/schedule search, weather, web search, user memory, reminders.
+- **3 Mini-Games**: Shiritori, buddy pets (18 species, 5 rarity tiers), hangman with leaderboards.
+- **SQLite Persistence**: Sessions, memory, reminders, and game scores survive restarts.
 
 ---
 
@@ -202,13 +202,13 @@ flowchart TD
     Rehydrate -->|"ADK session\nevents"| Prompt
 ```
 
-**Session persistence**: @mention interactions and bot responses are saved to `session_history` with userId and username. On cold start, up to 20 messages are rehydrated (max 2h age to prevent stale context contamination). Sessions idle-timeout and auto-destroy.
+**Session Persistence**: @mention interactions and bot responses are saved to `session_history` with userId and username. On cold start, up to 20 messages are rehydrated (max 2h age to prevent stale context contamination). Sessions idle-timeout and auto-destroy.
 
-**Passive buffer**: All messages in monitored channels flow into a 20-message in-memory **FIFO ring**. Serves two purposes: overheard context injection (last 10 messages into the system prompt) and feeding the background fact extractor. Also persists `userId → username + displayName` mappings to SQLite for cross-server identity resolution.
+**Passive Buffer**: All messages in monitored channels flow into a 20-message in-memory **FIFO ring**. Serves two purposes: overheard context injection (last 10 messages into the system prompt) and feeding the background fact extractor. Also persists `userId → username + displayName` mappings to SQLite for cross-server identity resolution.
 
-**Fact extraction**: Every 10 messages, a background Gemini call extracts personal facts (interests, habits, preferences, identity) for all users in the buffer. Facts are stored by userId, labeled by username in the prompt.
+**Fact Extraction**: Every 10 messages, a background Gemini call extracts personal facts (interests, habits, preferences, identity) for all users in the buffer. Facts are stored by userId, labeled by username in the prompt.
 
-**Prompt injection**: When responding, ALL known users' facts are loaded (not just the current speaker), resolved from `user_names` table + `session_history` + current interaction. Labeled as `username (DisplayName)` for cross-server matching.
+**Prompt Injection**: When responding, ALL known users' facts are loaded (not just the current speaker), resolved from `user_names` table + `session_history` + current interaction. Labeled as `username (DisplayName)` for cross-server matching.
 
 | SQLite Table      | Purpose                                                    |
 | ----------------- | ---------------------------------------------------------- |
@@ -578,11 +578,11 @@ cd ~/rokabot && git pull && docker compose up -d --build
 
 Rokabot is self-hosted and open-source. All data stays on your own machine.
 
-- **What is stored**: conversation history (7-day retention), per-user facts extracted from public channel messages (configurable retention), Discord usernames/display names, reminders, and game scores. Everything lives in a local SQLite file (`data/rokabot.db`).
-- **What is NOT stored**: DMs, message attachments, or any data from channels where the bot hasn't been @mentioned.
-- **Third-party calls**: messages are sent to the Gemini API for response generation and fact extraction. No user data is sent elsewhere.
-- **No telemetry**: the bot does not phone home, collect analytics, or share data with the developer or any third party.
-- **User control**: users can ask the bot what it knows about them via the `recall_user` tool. Server operators have full access to the SQLite database and can delete any data at any time.
+- **What is Stored**: Conversation history (7-day retention), per-user facts extracted from public channel messages (configurable retention), Discord usernames/display names, reminders, and game scores. Everything lives in a local SQLite file (`data/rokabot.db`).
+- **What is NOT Stored**: DMs, message attachments, or any data from channels where the bot hasn't been @mentioned.
+- **Third-Party calls**: Messages are sent to the Gemini API for response generation and fact extraction. No user data is sent elsewhere.
+- **No Telemetry**: The bot does not phone home, collect analytics, or share data with the developer or any third party.
+- **User Control**: Users can ask the bot what it knows about them via the `recall_user` tool. Server operators have full access to the SQLite database and can delete any data at any time.
 
 If you deploy this bot, you are the sole data controller. Consider informing your server members that the bot passively monitors conversations in channels where it has been @mentioned.
 
@@ -591,3 +591,5 @@ If you deploy this bot, you are the sole data controller. Consider informing you
 ## License
 
 MIT. 2026.
+
+---
