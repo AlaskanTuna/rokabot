@@ -34,10 +34,10 @@ client.once('clientReady', () => {
   getDb()
   startReminderScheduler(client)
 
-  pruneOldHistory()
+  pruneOldHistory(config.session.historyRetentionDays)
   pruneOldFacts(config.memory.factRetentionDays)
 
-  setInterval(() => pruneOldHistory(), 60 * 60 * 1000)
+  setInterval(() => pruneOldHistory(config.session.historyRetentionDays), 60 * 60 * 1000)
   setInterval(() => pruneOldFacts(config.memory.factRetentionDays), 24 * 60 * 60 * 1000)
   setInterval(() => cleanupExpired(), 60 * 60 * 1000)
   setInterval(() => cleanupExpiredCooldowns(), 60 * 60 * 1000)

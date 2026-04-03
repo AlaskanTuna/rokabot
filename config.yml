@@ -18,6 +18,7 @@ session:
   ttl: 500000 # Idle session timeout in ms before ADK session is destroyed
   windowSize: 20 # Max messages stored in ADK session history (rehydrated from SQLite)
   maxRehydrationAge: 7200000 # Max age of messages to rehydrate in ms (2h, older messages are skipped)
+  historyRetentionDays: 7 # Days before session history is auto-pruned (hourly check)
 
 discord:
   maxMessageLength: 1500 # Char limit for bot replies (Discord max is 2000)

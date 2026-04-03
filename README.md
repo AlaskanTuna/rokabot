@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/app-icon.jpg" alt="Rokabot" width="128" height="128" style="border-radius: 50%;" />
+  <img src="assets/banner.png" alt="Rokabot" />
 </p>
 
 <h1 align="center">Rokabot</h1>
@@ -19,7 +19,17 @@
 
 ---
 
-Rokabot responds to `/chat` slash commands, @mentions, and replies with in-character dialogue. It can also perceive images attached to messages via Gemini's multimodal input. It maintains per-channel conversational memory using a 20-message sliding window with idle TTL, backed by SQLite for persistence across restarts. Monitored channels also inject overheard context — Roka passively reads recent messages even when not directly addressed. A 4-layer prompt system drives personality, speech patterns, dynamic tone selection, and channel awareness.
+## Who is Maniwa Roka?
+
+<img align="right" src="assets/roka-sticker-1.png" alt="Roka serving drinks" width="100" />
+
+**Maniwa Roka** (馬庭 芦花) is a sub-heroine from [Senren\*Banka](https://vndb.org/v19073) (千恋＊万花), a visual novel by Yuzusoft (2016). She's the eldest in her friend group — the only one who's already graduated and working full-time, managing her family's traditional Japanese sweets shop (甘味処) in the secluded mountain village of Hoori.
+
+She's warm, gently teasing, and naturally falls into the "big sister" role — dispensing advice, cooking for people, and looking after everyone around her. But beneath that composed exterior, she's more fragile than she lets on: zero romantic experience, secretly anxious about her age, and afraid of being the person everyone relies on but nobody chooses. Her defining charm is the gap between her cool onee-san persona and the flustered, stammering mess she becomes when someone shows genuine interest in her.
+
+<img align="right" src="assets/roka-sticker-2.png" alt="Roka in casual outfit" width="90" />
+
+Rokabot brings this personality to Discord. It responds to `/chat` slash commands, @mentions, and replies with in-character dialogue powered by Gemini Flash Lite. It perceives images, passively monitors conversations for context awareness, remembers personal facts about users across servers, and maintains per-channel conversational memory — all running on a Raspberry Pi 5.
 
 ## Features
 
@@ -472,6 +482,8 @@ Secrets live in `.env`, tunables live in `config.yml`.
 | `rateLimit.rpd`              | `RATE_LIMIT_RPD`             | `500`                           | Requests per day                                  |
 | `session.ttl`                | `SESSION_TTL_MS`             | `500000`                        | Idle session TTL (ms)                             |
 | `session.windowSize`         | `SESSION_WINDOW_SIZE`        | `20`                            | Max messages in ADK session history               |
+| `session.maxRehydrationAge`  | --                           | `7200000`                       | Max age of messages to rehydrate (ms)             |
+| `session.historyRetentionDays` | --                         | `7`                             | Days before session history is auto-pruned        |
 | `discord.maxMessageLength`   | `DISCORD_MAX_MESSAGE_LENGTH` | `1500`                          | Bot reply char limit                              |
 | `memory.bufferSize`          | --                           | `20`                            | Passive ring buffer size per channel              |
 | `memory.contextSize`         | --                           | `10`                            | Overheard messages injected into system prompt    |
