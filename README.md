@@ -141,34 +141,71 @@ flowchart TD
 </details>
 
 <details>
-<summary><strong>Session & Persistence</strong></summary>
+<summary><strong>Channel Awareness & Memory Architecture</strong></summary>
 
-Sessions are per-channel, with in-memory ADK sessions as the hot path and SQLite as persistent backing store. Session history older than 7 days is automatically pruned on an hourly interval.
+Three interconnected systems give Roka awareness of conversations, people, and context. Each handles a different scope of information:
 
 ```mermaid
-flowchart LR
-    Msg([New message]) --> Get["Get or create\nADK session"]
-    Get --> Cold{Session\nexists?}
-    Cold -->|No| Hydrate["Rehydrate from\nSQLite history"]
-    Cold -->|Yes| Window
-    Hydrate --> Window["Session stores up to\n20 messages (events)"]
-    Window --> Timer["Reset idle timer"]
-    Timer --> Idle{Idle for 5 min?}
-    Idle -->|Yes| Destroy["Destroy in-memory\nsession"]
-    Idle -->|No| Wait["Wait for\nnext message"]
-    Window --> Persist["Write-behind\nto SQLite"]
-    Persist --> Prune["Hourly prune\n(> 7 days old)"]
+flowchart TD
+    subgraph Input["Every Guild Message"]
+        Msg([Message in\nmonitored channel])
+    end
+
+    subgraph PassiveBuffer["Passive Buffer (in-memory)"]
+        Buffer["20-message FIFO ring\nAll messages including bot responses"]
+        UserMap["user_names table\n(userId → username + displayName)"]
+    end
+
+    subgraph Extraction["Background Fact Extraction"]
+        Counter{"10 messages\nsince last?"}
+        Extract["Background Gemini call\n(dedicated extraction prompt)"]
+        Parse["Parse facts → filter bot/dupes\n→ save to SQLite"]
+    end
+
+    subgraph SessionHistory["Session History (SQLite)"]
+        History["session_history table\n@mention + bot response pairs\nwith userId + username"]
+        Rehydrate["Rehydrate on cold start\n(max 2h age filter)"]
+    end
+
+    subgraph PromptAssembly["System Prompt Assembly (@mention)"]
+        Facts["Load ALL participants' facts\nfrom user_names + session_history"]
+        Overheard["Inject last 10 buffer messages\nas overheard context"]
+        Prompt["Final system prompt\n4 layers + facts + context"]
+    end
+
+    Msg --> Buffer
+    Msg --> UserMap
+    Buffer --> Counter
+    Counter -->|Yes| Extract
+    Extract --> Parse
+    Counter -->|No| Wait([Wait])
+
+    Buffer -->|last 10 msgs| Overheard
+    UserMap --> Facts
+    History --> Facts
+    History --> Rehydrate
+
+    Facts --> Prompt
+    Overheard --> Prompt
+    Rehydrate -->|"ADK session\nevents"| Prompt
 ```
 
-SQLite tables:
+**Session persistence** -- @mention interactions and bot responses are saved to `session_history` with userId and username. On cold start, up to 20 messages are rehydrated (max 2h age to prevent stale context contamination). Sessions idle-timeout and auto-destroy.
 
-| Table             | Purpose                                    |
-| ----------------- | ------------------------------------------ |
-| `session_history` | Conversation messages for rehydration      |
-| `user_memory`     | Per-user facts (max 20 per user)           |
-| `reminders`       | Scheduled reminders with delivery tracking |
-| `game_scores`     | Shiritori and hangman scores               |
-| `buddy`           | Per-user companion spirit data and stats   |
+**Passive buffer** -- All messages in monitored channels flow into a 20-message in-memory FIFO ring (never cleared). Serves two purposes: overheard context injection (last 10 messages into the system prompt) and feeding the background fact extractor. Also persists `userId → username + displayName` mappings to SQLite for cross-server identity resolution.
+
+**Fact extraction** -- Every 10 messages, a background Gemini call extracts personal facts (interests, habits, preferences, identity) for all users in the buffer. Facts are stored by userId, labeled by username in the prompt, capped at 20 per user with 90-day retention.
+
+**Prompt injection** -- When responding, ALL known users' facts are loaded (not just the current speaker), resolved from `user_names` table + `session_history` + current interaction. Labeled as `username (DisplayName)` for cross-server matching.
+
+| SQLite Table       | Purpose                                             |
+| ------------------ | --------------------------------------------------- |
+| `session_history`  | Conversation messages with userId/username for rehydration |
+| `user_memory`      | Per-user facts (max 20 per user, 90-day TTL)        |
+| `user_names`       | Persistent userId → username + displayName mappings  |
+| `reminders`        | Scheduled reminders with delivery tracking          |
+| `game_scores`      | Shiritori and hangman scores                        |
+| `buddy`            | Per-user companion spirit data and stats            |
 
 </details>
 
@@ -185,58 +222,6 @@ Rule-based keyword matching on the last 3 user messages (zero LLM cost). 12 tone
 | Flustered | `#FFB3B3` red | Sleepy | `#B0C4DE` steel blue |
 | Curious | `#B2EBF2` cyan | Competitive | `#FF6B6B` fiery red |
 | Annoyed | `#F8B4B8` rose | Tender | `#E1BEE7` lavender |
-
-</details>
-
-<details>
-<summary><strong>Per-User Relationship Memory</strong></summary>
-
-Roka passively learns about users by monitoring conversations in active channels. Facts are extracted via a background Gemini call and also available through explicit ADK tools.
-
-```mermaid
-flowchart TD
-    Msg([Guild message]) --> Monitored{"Channel\nmonitored?"}
-    Monitored -->|No| Skip1([Ignore])
-    Monitored -->|Yes| Buffer["Add to passive buffer\n(20-message FIFO ring)"]
-    Buffer --> Counter{"10 messages\nsince last extraction?"}
-    Counter -->|No| Wait([Wait for more])
-    Counter -->|Yes| Extract["Background Gemini call\n(separate from conversation)"]
-    Extract --> Parse["Parse JSON facts\nfor ALL users in window"]
-    Parse --> BotCheck{"Fact about\nthe bot?"}
-    BotCheck -->|Yes| Skip3([Skip])
-    BotCheck -->|No| Dedup{"Fact already\nexists?"}
-    Dedup -->|Yes| Skip2([Skip])
-    Dedup -->|No| Save["Save to SQLite"]
-
-    Mention(["@mention Roka"]) --> Activate["Mark channel\nas monitored (24h)"]
-    Activate --> Fetch["Fetch user facts\nfrom SQLite"]
-    Fetch --> Inject{"Facts exist?"}
-    Inject -->|Yes| Append["Append to prompt +\nrefresh timestamps"]
-    Inject -->|No| Context
-    Append --> Context["Inject overheard context\n(last 10 channel messages)"]
-    Context --> LLM["Send to Gemini"]
-```
-
-**How it works:**
-
-- **Active channel monitoring**: Channels where Roka has been @mentioned in the last 24h are "monitored." All messages flow into a passive in-memory FIFO ring buffer.
-- **Background extraction**: Every 10 messages, a background Gemini call extracts facts for all users in the window. The buffer is never cleared — old messages naturally evict.
-- **Overheard context**: Last 10 buffer messages are injected into the system prompt as "Recent Channel Activity" so Roka is aware of nearby conversation.
-- **Cross-server identity**: Users are tracked by immutable Discord username alongside server-specific display names. Facts are labeled as `username (DisplayName)` in the prompt so the LLM can match regardless of which name is used. Mappings are persisted in session history and backfilled automatically.
-- **Multi-user prompt injection**: Facts for ALL known channel participants are loaded into the prompt — not just the current speaker. Users are resolved from session history, passive buffer, and the current interaction.
-- **Retention**: 20 facts per user (oldest evicted), 90-day TTL with refresh-on-access, daily pruning.
-
-| Aspect             | Detail                                                                 |
-| ------------------ | ---------------------------------------------------------------------- |
-| Storage            | SQLite `user_memory` table (user_id, fact_key, fact_value, updated_at) |
-| Cap                | 20 facts per user, oldest evicted on overflow                          |
-| Identity           | Tracked by Discord username (immutable, cross-server)                  |
-| Passive monitoring | 20-message FIFO ring buffer in monitored channels (in-memory only)     |
-| Overheard context  | Last 10 buffer messages injected into system prompt per request        |
-| Extraction trigger | Every 10 messages, background Gemini call (~1 extra RPM per 10 msgs)   |
-| Channel monitoring | Auto-activated on @mention, 24h TTL refreshed on each new @mention     |
-| Fact retention     | 90-day TTL with refresh-on-access; daily pruning job                   |
-| Deduplication      | Skips identical key+value; skips facts about the bot itself            |
 
 </details>
 
