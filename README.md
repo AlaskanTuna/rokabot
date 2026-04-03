@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.png" alt="Rokabot" />
+  <img src="assets/app-icon.jpg" alt="Rokabot" width="128" height="128" style="border-radius: 50%;" />
 </p>
 
 <h1 align="center">Rokabot</h1>
@@ -21,15 +21,17 @@
 
 ## Who is Maniwa Roka?
 
-<img align="right" src="assets/roka-sticker-1.png" alt="Roka serving drinks" width="100" />
+<img align="left" src="assets/roka-sticker-1.png" alt="Roka serving drinks" width="100" />
 
-**Maniwa Roka** (馬庭 芦花) is a sub-heroine from [Senren\*Banka](https://vndb.org/v19073) (千恋＊万花), a visual novel by Yuzusoft (2016). She's the eldest in her friend group — the only one who's already graduated and working full-time, managing her family's traditional Japanese sweets shop (甘味処) in the secluded mountain village of Hoori.
+**Maniwa Roka** (馬庭 芦花) is a warm, gently teasing side character from [Senren\*Banka](https://vndb.org/v19073) (千恋＊万花). She's naturally falls into the onee-san role but her real charm is how much she deserves attention herself. Rokabot is a conversation-first multi-purpose bot that brings that energy to Discord and spreads love for side characters through in-character replies to **/slash commands**, **@mentions** and **replies**.
 
-She's warm, gently teasing, and naturally falls into the "big sister" role — dispensing advice, cooking for people, and looking after everyone around her. But beneath that composed exterior, she's more fragile than she lets on: zero romantic experience, secretly anxious about her age, and afraid of being the person everyone relies on but nobody chooses. Her defining charm is the gap between her cool onee-san persona and the flustered, stammering mess she becomes when someone shows genuine interest in her.
+<img align="right" src="assets/roka-sticker-2.png" alt="Roka in casual outfit" width="80" />
 
-<img align="right" src="assets/roka-sticker-2.png" alt="Roka in casual outfit" width="90" />
+Rokabot will also respond with in-character dialogue powered by Gemini Flash Lite, perceives images, passively monitors conversations for context awareness, remembers personal facts about users across servers and maintains per-channel conversational memory.
 
-Rokabot brings this personality to Discord. It responds to `/chat` slash commands, @mentions, and replies with in-character dialogue powered by Gemini Flash Lite. It perceives images, passively monitors conversations for context awareness, remembers personal facts about users across servers, and maintains per-channel conversational memory — all running on a Raspberry Pi 5.
+<img src="assets/banner.png" alt="Yuzucook" />
+
+---
 
 ## Features
 
@@ -470,40 +472,40 @@ docker compose up -d
 
 Secrets live in `.env`, tunables live in `config.yml`.
 
-| YAML Path                    | Env Override                 | Default                         | Description                                       |
-| ---------------------------- | ---------------------------- | ------------------------------- | ------------------------------------------------- |
-| `gemini.model`               | `GEMINI_MODEL`               | `gemini-3.1-flash-lite-preview` | Gemini model ID                                   |
-| `gemini.timeout`             | `GEMINI_TIMEOUT`             | `25000`                         | API request timeout (ms)                          |
-| `gemini.maxRetries`          | `GEMINI_MAX_RETRIES`         | `3`                             | Max retries for transient errors (429, 500, 503)  |
-| `gemini.maxOutputTokens`     | `GEMINI_MAX_OUTPUT_TOKENS`   | `500`                           | Max tokens per response                           |
-| `gemini.baseRetryDelay`      | --                           | `2000`                          | Initial retry delay in ms (doubles each retry)    |
-| `gemini.maxLlmCalls`         | --                           | `4`                             | Max chained tool calls per request                |
-| `rateLimit.rpm`              | `RATE_LIMIT_RPM`             | `15`                            | Requests per minute                               |
-| `rateLimit.rpd`              | `RATE_LIMIT_RPD`             | `500`                           | Requests per day                                  |
-| `session.ttl`                | `SESSION_TTL_MS`             | `500000`                        | Idle session TTL (ms)                             |
-| `session.windowSize`         | `SESSION_WINDOW_SIZE`        | `20`                            | Max messages in ADK session history               |
-| `session.maxRehydrationAge`  | --                           | `7200000`                       | Max age of messages to rehydrate (ms)             |
-| `session.historyRetentionDays` | --                         | `7`                             | Days before session history is auto-pruned        |
-| `discord.maxMessageLength`   | `DISCORD_MAX_MESSAGE_LENGTH` | `1500`                          | Bot reply char limit                              |
-| `memory.bufferSize`          | --                           | `20`                            | Passive ring buffer size per channel              |
-| `memory.contextSize`         | --                           | `10`                            | Overheard messages injected into system prompt    |
-| `memory.extractionInterval`  | --                           | `10`                            | Messages between fact extractions                 |
-| `memory.extractionGapMs`     | --                           | `10000`                         | Minimum ms between extractions (global)           |
-| `memory.maxFactsPerUser`     | --                           | `20`                            | Max stored facts per user                         |
-| `memory.factRetentionDays`   | --                           | `14`                            | Days before unused facts are pruned               |
-| `memory.channelMonitorTtlMs` | --                           | `86400000`                      | Channel monitoring TTL after last @mention (24h)  |
-| `emoji.probability`          | --                           | `0.33`                          | Reaction probability when keyword matches         |
-| `emoji.cooldownMs`           | --                           | `180000`                        | Per-channel reaction cooldown (ms)                |
-| `reminders.checkIntervalMs`  | --                           | `5000`                          | Reminder scheduler poll interval (ms)             |
-| `reminders.maxPerUser`       | --                           | `5`                             | Max active reminders per user                     |
-| `reminders.staleThresholdMs` | --                           | `300000`                        | Auto-drop reminders older than this past due (ms) |
-| `games.hangmanLives`         | --                           | `6`                             | Wrong guesses before game over                    |
-| `games.hangmanTimeoutMs`     | --                           | `60000`                         | Hangman inactivity timeout (ms)                   |
-| `games.shiritoriTimeoutMs`   | --                           | `60000`                         | Shiritori turn timeout (ms)                       |
-| `games.shinyChance`          | --                           | `0.01`                          | Shiny buddy pet hatch chance                      |
-| `statusCycleMs`              | --                           | `900000`                        | Bot status rotation interval (ms)                 |
-| `timezone`                   | `TZ`                         | --                              | IANA timezone (e.g. `Asia/Singapore`)             |
-| `logging.level`              | `LOG_LEVEL`                  | `info`                          | Log level (debug/info/warn/error)                 |
+| YAML Path                      | Env Override                 | Default                         | Description                                       |
+| ------------------------------ | ---------------------------- | ------------------------------- | ------------------------------------------------- |
+| `gemini.model`                 | `GEMINI_MODEL`               | `gemini-3.1-flash-lite-preview` | Gemini model ID                                   |
+| `gemini.timeout`               | `GEMINI_TIMEOUT`             | `25000`                         | API request timeout (ms)                          |
+| `gemini.maxRetries`            | `GEMINI_MAX_RETRIES`         | `3`                             | Max retries for transient errors (429, 500, 503)  |
+| `gemini.maxOutputTokens`       | `GEMINI_MAX_OUTPUT_TOKENS`   | `500`                           | Max tokens per response                           |
+| `gemini.baseRetryDelay`        | --                           | `2000`                          | Initial retry delay in ms (doubles each retry)    |
+| `gemini.maxLlmCalls`           | --                           | `4`                             | Max chained tool calls per request                |
+| `rateLimit.rpm`                | `RATE_LIMIT_RPM`             | `15`                            | Requests per minute                               |
+| `rateLimit.rpd`                | `RATE_LIMIT_RPD`             | `500`                           | Requests per day                                  |
+| `session.ttl`                  | `SESSION_TTL_MS`             | `500000`                        | Idle session TTL (ms)                             |
+| `session.windowSize`           | `SESSION_WINDOW_SIZE`        | `20`                            | Max messages in ADK session history               |
+| `session.maxRehydrationAge`    | --                           | `7200000`                       | Max age of messages to rehydrate (ms)             |
+| `session.historyRetentionDays` | --                           | `7`                             | Days before session history is auto-pruned        |
+| `discord.maxMessageLength`     | `DISCORD_MAX_MESSAGE_LENGTH` | `1500`                          | Bot reply char limit                              |
+| `memory.bufferSize`            | --                           | `20`                            | Passive ring buffer size per channel              |
+| `memory.contextSize`           | --                           | `10`                            | Overheard messages injected into system prompt    |
+| `memory.extractionInterval`    | --                           | `10`                            | Messages between fact extractions                 |
+| `memory.extractionGapMs`       | --                           | `10000`                         | Minimum ms between extractions (global)           |
+| `memory.maxFactsPerUser`       | --                           | `20`                            | Max stored facts per user                         |
+| `memory.factRetentionDays`     | --                           | `14`                            | Days before unused facts are pruned               |
+| `memory.channelMonitorTtlMs`   | --                           | `86400000`                      | Channel monitoring TTL after last @mention (24h)  |
+| `emoji.probability`            | --                           | `0.33`                          | Reaction probability when keyword matches         |
+| `emoji.cooldownMs`             | --                           | `180000`                        | Per-channel reaction cooldown (ms)                |
+| `reminders.checkIntervalMs`    | --                           | `5000`                          | Reminder scheduler poll interval (ms)             |
+| `reminders.maxPerUser`         | --                           | `5`                             | Max active reminders per user                     |
+| `reminders.staleThresholdMs`   | --                           | `300000`                        | Auto-drop reminders older than this past due (ms) |
+| `games.hangmanLives`           | --                           | `6`                             | Wrong guesses before game over                    |
+| `games.hangmanTimeoutMs`       | --                           | `60000`                         | Hangman inactivity timeout (ms)                   |
+| `games.shiritoriTimeoutMs`     | --                           | `60000`                         | Shiritori turn timeout (ms)                       |
+| `games.shinyChance`            | --                           | `0.01`                          | Shiny buddy pet hatch chance                      |
+| `statusCycleMs`                | --                           | `900000`                        | Bot status rotation interval (ms)                 |
+| `timezone`                     | `TZ`                         | --                              | IANA timezone (e.g. `Asia/Singapore`)             |
+| `logging.level`                | `LOG_LEVEL`                  | `info`                          | Log level (debug/info/warn/error)                 |
 
 ---
 
