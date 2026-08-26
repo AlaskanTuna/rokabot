@@ -25,6 +25,7 @@ vi.mock('../../utils/logger.js', () => ({
 vi.mock('../concurrency.js', () => ({ isChannelBusy: () => false, markBusy: vi.fn(), markFree: vi.fn() }))
 vi.mock('../errorHandler.js', () => ({ isIgnorableDiscordError: () => false }))
 vi.mock('../responses.js', () => ({
+  escapeBackticks: (text: string) => text.replace(/\\?`/g, '\\`'),
   getRandomBusy: () => 'busy',
   getRandomDecline: () => 'decline',
   getRandomError: () => 'error',
@@ -171,6 +172,24 @@ describe('interaction handler metrics', () => {
     await createInteractionHandler(rateLimiterStub() as never)(interaction as never)
 
     expect(mocks.splitResponse.mock.calls[0][0]).toContain("I couldn't open that file~")
+  })
+
+  // Both reply surfaces have to escape, and they are separate call sites — this pins /ask, and the mention
+  // path is pinned in messageCreate.test.ts. Asserted on what reaches splitResponse rather than on the
+  // rendered message, because the escaping has to happen BEFORE the split: it lengthens the text, and a
+  // chunk sized against the raw length would overrun the budget it was measured for.
+  it('escapes her kaomoji backtick on /ask so it cannot open a code span', async () => {
+    mocks.generateResponse.mockResolvedValueOnce({
+      text: 'Ara~, Ikuyo? (\u00b4\u30fb\u03c9\u30fb`) \u266a ... through `gonkarouter.io` with free tokens.',
+      tone: 'playful',
+      toolsUsed: [],
+      metrics
+    })
+    const interaction = askWith([])
+
+    await createInteractionHandler(rateLimiterStub() as never)(interaction as never)
+
+    expect(mocks.splitResponse.mock.calls[0][0].match(/(?<!\\)`/g)).toBeNull()
   })
 
   // Documents ride the existing attachment slots, so accepting the type is the whole of the change on this

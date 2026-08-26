@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getRandomDecline, getRandomError, splitResponse } from '../responses.js'
+import { escapeBackticks, getRandomDecline, getRandomError, splitResponse } from '../responses.js'
 
 describe('getRandomDecline', () => {
   it('returns a non-empty string', () => {
@@ -152,5 +152,48 @@ describe('splitResponse', () => {
     expect(result.length).toBe(2)
     expect(result[0]).toBe('aaaa bbbb')
     expect(result[1]).toBe('cccc')
+  })
+})
+
+/**
+ * Her kaomoji carry a literal backtick — `(´・ω・`)` is the first entry in the speech layer's list — and
+ * Discord pairs any two backticks in a message into an inline code span. One on its own is harmless and
+ * renders as typed; a second one anywhere later swallows everything between them. That is exactly what a
+ * user reported: a reply whose opening kaomoji paired with a backticked domain three paragraphs down, and
+ * turned the whole opening into monospace with the bold markers showing as raw asterisks.
+ *
+ * Measured on the Pi over the retained window: 15 of 57 replies carry a backtick, 14 of them unpaired, and
+ * 14 match the kaomoji shape. The speech prompt tries to pre-escape it, and the model reproduced that escape
+ * 3 times against 12 bare ones — so the escape is a hope, not a mechanism, and the guarantee has to be here.
+ */
+describe('escapeBackticks', () => {
+  it('escapes a bare backtick so Discord renders it instead of opening a code span', () => {
+    expect(escapeBackticks('(´・ω・`)')).toBe('(´・ω・\\`)')
+  })
+
+  it('leaves an already-escaped backtick single-escaped', () => {
+    expect(escapeBackticks('(´・ω・\\`)')).toBe('(´・ω・\\`)')
+  })
+
+  it('is idempotent, so escaping twice cannot double up', () => {
+    const once = escapeBackticks('a ` b')
+    expect(escapeBackticks(once)).toBe(once)
+  })
+
+  it('leaves text with no backticks untouched', () => {
+    expect(escapeBackticks('Fufu~ ♪ nothing to escape here')).toBe('Fufu~ ♪ nothing to escape here')
+  })
+
+  // The reported shape: a kaomoji backtick and a backticked domain further down.
+  it('leaves no unescaped backtick in the reported reply shape', () => {
+    const reply = 'Ara~, Ikuyo? (´・ω・`) ♪ ... verification through `gonkarouter.io` with free tokens.'
+    const escaped = escapeBackticks(reply)
+
+    expect(escaped.match(/(?<!\\)`/g)).toBeNull()
+  })
+
+  it('keeps every backtick, rather than dropping the character she meant to type', () => {
+    const reply = 'Ara~ (´・ω・`) ♪ see `example.io` ne~'
+    expect(escapeBackticks(reply).match(/`/g)).toHaveLength(3)
   })
 })
