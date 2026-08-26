@@ -13,6 +13,7 @@ import { isChannelBusy, markBusy, markFree } from '../concurrency.js'
 import { isIgnorableDiscordError } from '../errorHandler.js'
 import { buildRokaMessage } from '../messageBuilder.js'
 import {
+  escapeBackticks,
   getRandomBusy,
   getRandomDecline,
   getRandomError,
@@ -212,7 +213,9 @@ export function createInteractionHandler(rateLimiter: RateLimiter, client?: Clie
       if (truncatedAttachments > 0) notes.push(getRandomPartialAttachment())
       if (refusedAttachments > 0) notes.push(getRandomOversizedAttachment())
       const withNudge = notes.length > 0 ? `${responseText}\n\n${notes.join('\n\n')}` : responseText
-      const chunks = splitResponse(withNudge)
+      // Escaped before the split, not after: escaping lengthens the text, so doing it downstream would let a
+      // chunk sized against the raw length overrun the TextDisplay budget it was measured for.
+      const chunks = splitResponse(escapeBackticks(withNudge))
       logger.debug({ channelId, chunkCount: chunks.length }, 'Response split into chunks')
       await interaction.editReply(buildRokaMessage(chunks[0], tone, toolsUsed, sources))
 

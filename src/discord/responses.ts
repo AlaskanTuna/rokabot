@@ -74,6 +74,36 @@ export function getRandomError(): string {
   return ERROR_MESSAGES[Math.floor(Math.random() * ERROR_MESSAGES.length)]
 }
 
+/**
+ * Show every backtick she types instead of letting Discord read it as syntax.
+ *
+ * Her kaomoji carry a literal backtick — `(´・ω・`)` leads the speech layer's list — and Discord pairs any
+ * two backticks in a message into an inline code span. One alone is harmless and renders as typed; a second
+ * anywhere later swallows everything between, monospacing the text and exposing the bold markers inside it
+ * as raw asterisks. Reported by a user whose opening kaomoji paired with a backticked domain three
+ * paragraphs down.
+ *
+ * The speech layer already tries to pre-escape it, and that is the part which does not work: over the Pi's
+ * retained window the model reproduced the escape 3 times against 12 bare backticks. An escape the model has
+ * to remember is a hope; this is the mechanism.
+ *
+ * Escaping all of them rather than only the unpaired ones is deliberate. Which backtick was decorative and
+ * which was syntax is not recoverable from the text, and her replies are not a surface that formats code —
+ * the core layer already rules out code blocks. So the contract is simply: a backtick she writes is a
+ * backtick the reader sees. The cost is that an incidental `domain` shows its backticks rather than
+ * monospacing, which is a formatting she was never asked to use.
+ *
+ * `\\?` rather than a bare match so the ~20% of replies that DO arrive pre-escaped are normalised rather
+ * than double-escaped — `\\\\` would render a literal backslash and leave the backtick free to open a span
+ * again. That also makes this idempotent.
+ *
+ * Scoped to conversational replies by where it is called: /stats builds its own containers and keeps the
+ * inline code it uses on purpose.
+ */
+export function escapeBackticks(text: string): string {
+  return text.replace(/\\?`/g, '\\`')
+}
+
 /** Split long responses to fit within Discord's message character limit */
 export function splitResponse(text: string, maxLength = config.discord.maxMessageLength): string[] {
   if (text.length <= maxLength) return [text]
